@@ -1,0 +1,33 @@
+{
+  "name": "com.playtradex.sdk",
+  "version": "0.1.0-alpha",
+  "displayName": "PlayTradeX SDK",
+  "description": "Native blockchain SDK for Unity games and applications.\n\n• EVM-compatible blockchain integration\n• Native wallet creation and secure storage\n• Native currency balances and transactions\n• Smart contract read and write operations\n• Transaction consent and approval flow\n• Encrypted wallet export and import\n• Exact blockchain unit conversion\n• ABI conversion and Unity Editor tooling\n• Asynchronous operations with Unity main-thread callback dispatch\n• Windows x64 and Android arm64-v8a support",
+  "unity": "6000.3",
+  "documentationUrl": "https://github.com/ektishaf/playtradex-sdk-unity/blob/main/Documentation~/index.md",
+  "licensesUrl": "https://github.com/ektishaf/playtradex-sdk-unity/blob/main/LICENSE.md",
+  "changelogUrl": "https://github.com/ektishaf/playtradex-sdk-unity/blob/main/CHANGELOG.md",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "author": {
+    "name": "PlayTradeX"
+  },
+  "keywords": [
+    "playtradex",
+    "blockchain",
+    "ethereum",
+    "evm",
+    "web3",
+    "wallet",
+    "smart-contract",
+    "unity"
+  ],
+  "samples": [
+    {
+      "displayName": "PlayTradeX Sample",
+      "description": "Complete PlayTradeX SDK integration sample for Unity.\n\n• SDK initialization and readiness handling\n• Native wallet and balance operations\n• Native currency transactions\n• Smart contract read and write operations\n• Transaction consent and approval\n• Wallet export and import\n• Blockchain response and error handling",
+      "path": "Samples~/PlayTradeX"
+    }
+  ]
+}

@@ -1,0 +1,375 @@
+namespace PlayTradeX
+{
+    // ============================================================
+    // Initialization
+    // ============================================================
+
+    /// <summary>
+    /// Represents the result of PlayTradeX SDK initialization.
+    /// </summary>
+    public sealed class InitializeResult
+    {
+        /// <summary>
+        /// Gets whether the SDK initialized successfully.
+        /// </summary>
+        public bool Initialized { get; }
+
+        /// <summary>
+        /// Gets the initialization error message, or an empty string
+        /// when no error was reported.
+        /// </summary>
+        public string Error { get; }
+
+        /// <summary>
+        /// Gets the wallet address associated with the initialized SDK.
+        /// </summary>
+        public string WalletAddress { get; }
+
+        internal InitializeResult(
+            bool initialized,
+            string error,
+            string walletAddress)
+        {
+            Initialized = initialized;
+            Error = error ?? string.Empty;
+            WalletAddress = walletAddress ?? string.Empty;
+        }
+    }
+
+
+    // ============================================================
+    // Base Response
+    // ============================================================
+
+    /// <summary>
+    /// Represents the common response data returned by PlayTradeX
+    /// SDK operations.
+    /// </summary>
+    public class BaseResponse
+    {
+        /// <summary>
+        /// Gets whether the operation completed successfully.
+        /// </summary>
+        public bool Success { get; }
+
+        /// <summary>
+        /// Gets the PlayTradeX error code returned by the operation.
+        /// </summary>
+        public int ErrorCode { get; }
+
+        /// <summary>
+        /// Gets the raw response body associated with the operation.
+        /// </summary>
+        public string Body { get; }
+
+        /// <summary>
+        /// Gets the error message returned by the operation.
+        /// </summary>
+        public string ErrorMessage { get; }
+
+        internal BaseResponse(
+            bool success,
+            int errorCode,
+            string body,
+            string errorMessage)
+        {
+            Success = success;
+            ErrorCode = errorCode;
+            Body = body ?? string.Empty;
+            ErrorMessage = errorMessage ?? string.Empty;
+        }
+    }
+
+
+    // ============================================================
+    // Blockchain Responses
+    // ============================================================
+
+    /// <summary>
+    /// Represents a native blockchain balance response.
+    /// </summary>
+    public sealed class NativeBalanceResponse : BaseResponse
+    {
+        /// <summary>
+        /// Gets the native blockchain balance.
+        /// </summary>
+        public string Balance { get; }
+
+        internal NativeBalanceResponse(
+            bool success,
+            int errorCode,
+            string body,
+            string errorMessage,
+            string balance)
+            : base(success, errorCode, body, errorMessage)
+        {
+            Balance = balance ?? string.Empty;
+        }
+    }
+
+
+    /// <summary>
+    /// Represents the result of a blockchain transaction.
+    /// </summary>
+    public sealed class TransactionResponse : BaseResponse
+    {
+        /// <summary>
+        /// Gets the transaction hash.
+        /// </summary>
+        public string TransactionHash { get; }
+
+        /// <summary>
+        /// Gets the transaction receipt.
+        /// </summary>
+        public string Receipt { get; }
+
+        internal TransactionResponse(
+            bool success,
+            int errorCode,
+            string body,
+            string errorMessage,
+            string transactionHash,
+            string receipt)
+            : base(success, errorCode, body, errorMessage)
+        {
+            TransactionHash = transactionHash ?? string.Empty;
+            Receipt = receipt ?? string.Empty;
+        }
+    }
+
+
+    /// <summary>
+    /// Represents the human-readable form of a contract ABI.
+    /// </summary>
+    public sealed class HumanReadableAbiResponse : BaseResponse
+    {
+        /// <summary>
+        /// Gets the human-readable ABI.
+        /// </summary>
+        public string Abi { get; }
+
+        internal HumanReadableAbiResponse(
+            bool success,
+            int errorCode,
+            string body,
+            string errorMessage,
+            string abi)
+            : base(success, errorCode, body, errorMessage)
+        {
+            Abi = abi ?? string.Empty;
+        }
+    }
+
+
+    /// <summary>
+    /// Represents the result of a smart contract read operation.
+    /// </summary>
+    public sealed class ContractReadResponse : BaseResponse
+    {
+        /// <summary>
+        /// Gets the data returned by the contract call.
+        /// </summary>
+        public string Data { get; }
+
+        internal ContractReadResponse(
+            bool success,
+            int errorCode,
+            string body,
+            string errorMessage,
+            string data)
+            : base(success, errorCode, body, errorMessage)
+        {
+            Data = data ?? string.Empty;
+        }
+    }
+
+
+    // ============================================================
+    // Wallet Responses
+    // ============================================================
+
+    /// <summary>
+    /// Represents the result of a wallet export operation.
+    /// </summary>
+    public sealed class WalletExportResponse : BaseResponse
+    {
+        /// <summary>
+        /// Gets the address of the exported wallet.
+        /// </summary>
+        public string WalletAddress { get; }
+
+        /// <summary>
+        /// Gets the destination path of the exported wallet file.
+        /// </summary>
+        public string FilePath { get; }
+
+        internal WalletExportResponse(
+            bool success,
+            int errorCode,
+            string body,
+            string errorMessage,
+            string walletAddress,
+            string filePath)
+            : base(success, errorCode, body, errorMessage)
+        {
+            WalletAddress = walletAddress ?? string.Empty;
+            FilePath = filePath ?? string.Empty;
+        }
+    }
+
+
+    /// <summary>
+    /// Represents the result of a wallet import operation.
+    /// </summary>
+    public sealed class WalletImportResponse : BaseResponse
+    {
+        /// <summary>
+        /// Gets the address of the imported wallet.
+        /// </summary>
+        public string WalletAddress { get; }
+
+        internal WalletImportResponse(
+            bool success,
+            int errorCode,
+            string body,
+            string errorMessage,
+            string walletAddress)
+            : base(success, errorCode, body, errorMessage)
+        {
+            WalletAddress = walletAddress ?? string.Empty;
+        }
+    }
+
+
+    // ============================================================
+    // Transaction Preparation
+    // ============================================================
+
+    /// <summary>
+    /// Represents a transaction prepared by PlayTradeX and awaiting
+    /// application consent before submission.
+    /// </summary>
+    public sealed class PreparedTransaction
+    {
+        /// <summary>
+        /// Gets the unique transaction identifier.
+        /// </summary>
+        public string Id { get; }
+
+        /// <summary>
+        /// Gets the RPC endpoint used for the transaction.
+        /// </summary>
+        public string Rpc { get; }
+
+        /// <summary>
+        /// Gets the target contract address.
+        /// </summary>
+        public string ContractAddress { get; }
+
+        /// <summary>
+        /// Gets the contract ABI.
+        /// </summary>
+        public string Abi { get; }
+
+        /// <summary>
+        /// Gets the contract function name.
+        /// </summary>
+        public string FunctionName { get; }
+
+        /// <summary>
+        /// Gets the encoded or serialized function parameters.
+        /// </summary>
+        public string Params { get; }
+
+        /// <summary>
+        /// Gets the native value attached to the transaction.
+        /// </summary>
+        public string Value { get; }
+
+        /// <summary>
+        /// Gets the transaction gas limit.
+        /// </summary>
+        public ulong GasLimit { get; }
+
+        /// <summary>
+        /// Gets the base fee per gas.
+        /// </summary>
+        public string BaseFeePerGas { get; }
+
+        /// <summary>
+        /// Gets the maximum priority fee per gas.
+        /// </summary>
+        public string MaxPriorityFeePerGas { get; }
+
+        /// <summary>
+        /// Gets the maximum fee per gas.
+        /// </summary>
+        public string MaxFeePerGas { get; }
+
+        /// <summary>
+        /// Gets the estimated maximum network fee.
+        /// </summary>
+        public string EstimatedMaxNetworkFee { get; }
+
+        /// <summary>
+        /// Gets whether transaction simulation completed successfully.
+        /// </summary>
+        public bool SimulationSucceeded { get; }
+
+        /// <summary>
+        /// Gets the simulation error message, if any.
+        /// </summary>
+        public string SimulationError { get; }
+
+        /// <summary>
+        /// Gets whether the prepared transaction can be submitted.
+        /// </summary>
+        public bool CanSubmit { get; }
+
+        /// <summary>
+        /// Gets the transaction preparation error, if any.
+        /// </summary>
+        public string PreparationError { get; }
+
+        internal PreparedTransaction(
+            string id,
+            string rpc,
+            string contractAddress,
+            string abi,
+            string functionName,
+            string params_,
+            string value,
+            ulong gasLimit,
+            string baseFeePerGas,
+            string maxPriorityFeePerGas,
+            string maxFeePerGas,
+            string estimatedMaxNetworkFee,
+            bool simulationSucceeded,
+            string simulationError,
+            bool canSubmit,
+            string preparationError)
+        {
+            Id = id ?? string.Empty;
+            Rpc = rpc ?? string.Empty;
+            ContractAddress = contractAddress ?? string.Empty;
+            Abi = abi ?? string.Empty;
+            FunctionName = functionName ?? string.Empty;
+            Params = params_ ?? string.Empty;
+            Value = value ?? string.Empty;
+
+            GasLimit = gasLimit;
+
+            BaseFeePerGas = baseFeePerGas ?? string.Empty;
+            MaxPriorityFeePerGas = maxPriorityFeePerGas ?? string.Empty;
+            MaxFeePerGas = maxFeePerGas ?? string.Empty;
+            EstimatedMaxNetworkFee =
+                estimatedMaxNetworkFee ?? string.Empty;
+
+            SimulationSucceeded = simulationSucceeded;
+            SimulationError = simulationError ?? string.Empty;
+
+            CanSubmit = canSubmit;
+            PreparationError = preparationError ?? string.Empty;
+        }
+    }
+}
