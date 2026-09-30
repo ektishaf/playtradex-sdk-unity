@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026.09",
+  "networks": [
+    {
+      "id": "ethereum-sepolia",
+      "networkName": "Ethereum Sepolia",
+      "ecosystem": "Ethereum",
+      "chainId": 11155111,
+      "symbol": "ETH",
+      "rpcUrls": [
+        "https://ethereum-sepolia-rpc.publicnode.com"
+      ],
+      "blockExplorerUrl": "https://sepolia.etherscan.io",
+      "isTestnet": true
+    },
+    {
+      "id": "bsc-testnet",
+      "networkName": "Binance Smart Chain Testnet",
+      "ecosystem": "BNB Chain",
+      "chainId": 97,
+      "symbol": "tBNB",
+      "rpcUrls": [
+        "https://bsc-testnet-dataseed.bnbchain.org",
+        "https://bsc-testnet.bnbchain.org",
+        "https://bsc-prebsc-dataseed.bnbchain.org"
+      ],
+      "blockExplorerUrl": "https://testnet.bscscan.com",
+      "isTestnet": true
+    },
+    {
+      "id": "opbnb-testnet",
+      "networkName": "opBNB Testnet",
+      "ecosystem": "BNB Chain",
+      "chainId": 5611,
+      "symbol": "tBNB",
+      "rpcUrls": [
+        "https://opbnb-testnet-rpc.bnbchain.org",
+        "https://opbnb-testnet.publicnode.com"
+      ],
+      "blockExplorerUrl": "https://testnet.opbnbscan.com",
+      "isTestnet": true
+    },
+    {
+      "id": "polygon-amoy",
+      "networkName": "Polygon Amoy",
+      "ecosystem": "Polygon",
+      "chainId": 80002,
+      "symbol": "POL",
+      "rpcUrls": [
+        "https://polygon-amoy.drpc.org"
+      ],
+      "blockExplorerUrl": "https://amoy.polygonscan.com",
+      "isTestnet": true
+    },
+    {
+      "id": "arbitrum-sepolia",
+      "networkName": "Arbitrum Sepolia",
+      "ecosystem": "Arbitrum",
+      "chainId": 421614,
+      "symbol": "ETH",
+      "rpcUrls": [
+        "https://sepolia-rollup.arbitrum.io/rpc"
+      ],
+      "blockExplorerUrl": "https://sepolia.arbiscan.io",
+      "isTestnet": true
+    },
+    {
+      "id": "avalanche-fuji",
+      "networkName": "Avalanche Fuji C-Chain",
+      "ecosystem": "Avalanche",
+      "chainId": 43113,
+      "symbol": "AVAX",
+      "rpcUrls": [
+        "https://api.avax-test.network/ext/bc/C/rpc"
+      ],
+      "blockExplorerUrl": "https://explorer-test.avax.network/c-chain",
+      "isTestnet": true
+    },
+    {
+      "id": "linea-sepolia",
+      "networkName": "Linea Sepolia",
+      "ecosystem": "Linea",
+      "chainId": 59141,
+      "symbol": "ETH",
+      "rpcUrls": [
+        "https://rpc.sepolia.linea.build"
+      ],
+      "blockExplorerUrl": "https://sepolia.lineascan.build",
+      "isTestnet": true
+    },
+    {
+      "id": "zksync-sepolia",
+      "networkName": "ZKsync Era Sepolia",
+      "ecosystem": "ZKsync",
+      "chainId": 300,
+      "symbol": "ETH",
+      "rpcUrls": [
+        "https://sepolia.era.zksync.dev"
+      ],
+      "blockExplorerUrl": "https://sepolia.explorer.zksync.io",
+      "isTestnet": true
+    },
+    {
+      "id": "gnosis-chiado",
+      "networkName": "Gnosis Chiado",
+      "ecosystem": "Gnosis",
+      "chainId": 10200,
+      "symbol": "XDAI",
+      "rpcUrls": [
+        "https://rpc.chiadochain.net",
+        "https://rpc.chiado.gnosis.gateway.fm"
+      ],
+      "blockExplorerUrl": "https://gnosis-chiado.blockscout.com",
+      "isTestnet": true
+    }
+  ]
+}

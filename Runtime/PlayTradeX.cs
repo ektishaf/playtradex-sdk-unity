@@ -1,41 +1,71 @@
 using AOT;
+
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+
 using UnityEngine;
+
 
 namespace PlayTradeX
 {
-    // ============================================================
-    // PlayTradeX SDK
-    // ============================================================
-
     /// <summary>
-    /// Main managed API for the PlayTradeX SDK.
+    /// Main managed Unity API for the PlayTradeX SDK.
     /// </summary>
     /// <remarks>
-    /// Provides Task-based asynchronous APIs for blockchain
-    /// and wallet operations.
+    /// Provides Task-based managed wrappers around the native PlayTradeX
+    /// C ABI.
     ///
-    /// Native callbacks are dispatched to Unity's main thread before
-    /// invoking application-facing callbacks or completing managed tasks.
+    /// The managed API supports:
+    ///
+    /// - Multiple configured blockchain networks.
+    /// - The SDK-managed PlayTradeX identity wallet.
+    /// - Application-managed external wallets.
+    /// - Standalone wallet generation.
+    /// - Transaction consent.
+    /// - Native currency transfers.
+    /// - Smart contract reads and writes.
+    /// - Identity-wallet import/export.
+    ///
+    /// Native callbacks are copied into managed objects before returning
+    /// from the native callback and are dispatched to Unity's main thread
+    /// before application-facing callbacks are executed.
     /// </remarks>
     public static class PlayTradeXSdk
     {
+        // ========================================================
+        // Events
+        // ========================================================
+
         /// <summary>
-        /// Raised when the SDK initialization state changes.
+        /// Raised whenever the SDK initialization state changes.
         /// </summary>
         public static event Action<bool> InitializationChanged;
 
-        private static readonly CPlayTradeXNative.LogCallback
-    NativeLogCallback = OnNativeLog;
 
-        private static readonly CPlayTradeXNative.TransactionConsentCallback
-            NativeTransactionConsentCallback = OnNativeTransactionConsent;
+        // ========================================================
+        // Native Callback References
+        // ========================================================
+
+        /*
+         * These delegates are stored statically so that the GC cannot
+         * collect them while native code still holds their function
+         * pointers.
+         */
+
+        private static readonly CPlayTradeXNative.LogCallback
+            NativeLogCallback = OnNativeLog;
+
+        private static readonly CPlayTradeXNative.GenerateWalletCallback
+            NativeGenerateWalletCallback = OnNativeGenerateWallet;
 
         private static readonly CPlayTradeXNative.InitializeCallback
             NativeInitializeCallback = OnNativeInitialize;
+
+        private static readonly CPlayTradeXNative.TransactionConsentCallback
+            NativeTransactionConsentCallback = OnNativeTransactionConsent;
 
         private static readonly CPlayTradeXNative.NativeBalanceCallback
             NativeBalanceCallback = OnNativeBalance;
@@ -54,13 +84,36 @@ namespace PlayTradeX
 
         private static readonly CPlayTradeXNative.WalletImportCallback
             NativeWalletImportCallback = OnNativeWalletImport;
-        private static Action<PreparedTransaction> _transactionConsentCallback;
 
-        private static readonly object UnityContextLock = new object();
 
-        private static SynchronizationContext _unitySynchronizationContext;
-        private static int _unityThreadId;
-        private static bool _loggingRegistered;
+        // ========================================================
+        // Transaction Consent
+        // ========================================================
+
+        private static Action<PreparedTransaction>
+            _transactionConsentCallback;
+
+
+        // ========================================================
+        // Unity Main Thread
+        // ========================================================
+
+        private static readonly object UnityContextLock =
+            new object();
+
+        private static SynchronizationContext
+            _unitySynchronizationContext;
+
+        private static int
+            _unityThreadId;
+
+
+        // ========================================================
+        // Logging State
+        // ========================================================
+
+        private static bool
+            _loggingRegistered;
 
 
         // ========================================================
@@ -68,11 +121,11 @@ namespace PlayTradeX
         // ========================================================
 
         /// <summary>
-        /// Registers PlayTradeX native logging with the Unity Console.
+        /// Registers native PlayTradeX logging with the Unity Console.
         /// </summary>
         /// <remarks>
-        /// This should be called from Unity's main thread before using
-        /// the SDK. PlayTradeXLifecycle performs this automatically.
+        /// This should initially be called from Unity's main thread so
+        /// the Unity SynchronizationContext can be captured.
         /// </remarks>
         public static void SetupLogging()
         {
@@ -83,17 +136,27 @@ namespace PlayTradeX
                 return;
             }
 
-            CPlayTradeXNative.SetLogCallback(NativeLogCallback, IntPtr.Zero);
+            CPlayTradeXNative.SetLogCallback(
+                NativeLogCallback,
+                IntPtr.Zero);
 
             _loggingRegistered = true;
         }
 
+
         [MonoPInvokeCallback(typeof(CPlayTradeXNative.LogCallback))]
-        private static void OnNativeLog(IntPtr message, int type, IntPtr userData)
+        private static void OnNativeLog(
+            IntPtr message,
+            int type,
+            IntPtr userData)
         {
-            // Native char* is guaranteed only for the duration
-            // of this callback. Copy it immediately.
-            string text = CPlayTradeXNative.GetString(message);
+            /*
+             * Native string memory is valid only for the callback.
+             * Copy before dispatching to the Unity thread.
+             */
+
+            string text =
+                CPlayTradeXNative.GetString(message);
 
             RunOnUnityThread(() =>
             {
@@ -119,59 +182,549 @@ namespace PlayTradeX
 
 
         // ========================================================
+        // Network Configuration Marshalling
+        // ========================================================
+
+        /// <summary>
+        /// Owns temporary unmanaged memory used while passing managed
+        /// NetworkConfig objects to CPlayTradeX_Initialize.
+        /// </summary>
+        /// <remarks>
+        /// The native SDK copies the supplied configuration during
+        /// CPlayTradeX_Initialize, so these allocations may be released
+        /// immediately after the native function returns.
+        /// </remarks>
+        private sealed class NativeNetworkAllocation : IDisposable
+        {
+            private readonly List<IntPtr> _strings =
+                new List<IntPtr>();
+
+            private readonly List<IntPtr> _rpcArrays =
+                new List<IntPtr>();
+
+            private IntPtr _networkArray;
+
+
+            internal IntPtr NetworkArray =>
+                _networkArray;
+
+
+            internal uint NetworkCount { get; private set; }
+
+
+            internal NativeNetworkAllocation(
+                NetworkConfig[] networks)
+            {
+                if (networks == null)
+                {
+                    throw new ArgumentNullException(
+                        nameof(networks));
+                }
+
+                if (networks.Length == 0)
+                {
+                    throw new ArgumentException(
+                        "At least one network must be configured.",
+                        nameof(networks));
+                }
+
+                ValidateNetworkConfigurations(
+                    networks);
+
+                NetworkCount =
+                    checked((uint)networks.Length);
+
+                int networkStructSize =
+                    Marshal.SizeOf<CPlayTradeXNative.NetworkConfig>();
+
+                _networkArray =
+                    Marshal.AllocHGlobal(
+                        checked(
+                            networkStructSize *
+                            networks.Length));
+
+                try
+                {
+                    for (int i = 0;
+                         i < networks.Length;
+                         ++i)
+                    {
+                        NetworkConfig network =
+                            networks[i];
+
+                        IntPtr idPointer =
+                            AllocateString(
+                                network.Id);
+
+                        IntPtr rpcArrayPointer =
+                            AllocateRpcArray(
+                                network.RpcEndpoints);
+
+                        var nativeNetwork =
+                            new CPlayTradeXNative.NetworkConfig
+                            {
+                                id =
+                                    idPointer,
+
+                                chainId =
+                                    network.ChainId,
+
+                                rpcEndpoints =
+                                    rpcArrayPointer,
+
+                                rpcEndpointCount =
+                                    checked(
+                                        (uint)
+                                        network.RpcEndpoints.Length)
+                            };
+
+                        IntPtr destination =
+                            IntPtr.Add(
+                                _networkArray,
+                                checked(
+                                    i *
+                                    networkStructSize));
+
+                        Marshal.StructureToPtr(
+                            nativeNetwork,
+                            destination,
+                            false);
+                    }
+                }
+                catch
+                {
+                    Dispose();
+                    throw;
+                }
+            }
+
+
+            private IntPtr AllocateString(
+                string value)
+            {
+                IntPtr pointer =
+                    Marshal.StringToHGlobalAnsi(
+                        value);
+
+                _strings.Add(
+                    pointer);
+
+                return pointer;
+            }
+
+
+            private IntPtr AllocateRpcArray(
+                string[] rpcEndpoints)
+            {
+                int pointerSize =
+                    IntPtr.Size;
+
+                IntPtr arrayPointer =
+                    Marshal.AllocHGlobal(
+                        checked(
+                            pointerSize *
+                            rpcEndpoints.Length));
+
+                _rpcArrays.Add(
+                    arrayPointer);
+
+                for (int i = 0;
+                     i < rpcEndpoints.Length;
+                     ++i)
+                {
+                    IntPtr rpcPointer =
+                        AllocateString(
+                            rpcEndpoints[i]);
+
+                    Marshal.WriteIntPtr(
+                        arrayPointer,
+                        checked(
+                            i *
+                            pointerSize),
+                        rpcPointer);
+                }
+
+                return arrayPointer;
+            }
+
+
+            public void Dispose()
+            {
+                for (int i = 0;
+                     i < _strings.Count;
+                     ++i)
+                {
+                    if (_strings[i] != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(
+                            _strings[i]);
+                    }
+                }
+
+                _strings.Clear();
+
+
+                for (int i = 0;
+                     i < _rpcArrays.Count;
+                     ++i)
+                {
+                    if (_rpcArrays[i] != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(
+                            _rpcArrays[i]);
+                    }
+                }
+
+                _rpcArrays.Clear();
+
+
+                if (_networkArray != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(
+                        _networkArray);
+
+                    _networkArray =
+                        IntPtr.Zero;
+                }
+
+                NetworkCount = 0;
+            }
+        }
+
+
+        private static void ValidateNetworkConfigurations(
+            NetworkConfig[] networks)
+        {
+            var ids =
+                new HashSet<string>(
+                    StringComparer.Ordinal);
+
+            for (int i = 0;
+                 i < networks.Length;
+                 ++i)
+            {
+                NetworkConfig network =
+                    networks[i];
+
+                if (network == null)
+                {
+                    throw new ArgumentException(
+                        $"Network configuration at index {i} is null.",
+                        nameof(networks));
+                }
+
+                ValidateNetworkId(
+                    network.Id);
+
+                if (!ids.Add(network.Id))
+                {
+                    throw new ArgumentException(
+                        $"Duplicate network ID '{network.Id}'.",
+                        nameof(networks));
+                }
+
+                if (network.ChainId == 0)
+                {
+                    throw new ArgumentException(
+                        $"Network '{network.Id}' has an invalid chain ID.",
+                        nameof(networks));
+                }
+
+                if (network.RpcEndpoints == null ||
+                    network.RpcEndpoints.Length == 0)
+                {
+                    throw new ArgumentException(
+                        $"Network '{network.Id}' has no RPC endpoints.",
+                        nameof(networks));
+                }
+
+                for (int rpcIndex = 0;
+                     rpcIndex < network.RpcEndpoints.Length;
+                     ++rpcIndex)
+                {
+                    if (string.IsNullOrWhiteSpace(
+                            network.RpcEndpoints[rpcIndex]))
+                    {
+                        throw new ArgumentException(
+                            $"Network '{network.Id}' contains an empty " +
+                            $"RPC endpoint at index {rpcIndex}.",
+                            nameof(networks));
+                    }
+                }
+            }
+        }
+
+
+        private static void ValidateNetworkId(
+            string networkId)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    networkId))
+            {
+                throw new ArgumentException(
+                    "Network ID is required.",
+                    nameof(networkId));
+            }
+        }
+
+
+        private static void ValidatePrivateKey(
+            string privateKey)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    privateKey))
+            {
+                throw new ArgumentException(
+                    "External wallet private key is required.",
+                    nameof(privateKey));
+            }
+        }
+
+
+        // ========================================================
+        // Standalone Wallet Generation
+        // ========================================================
+
+        /// <summary>
+        /// Generates a new standalone EVM wallet.
+        /// </summary>
+        /// <remarks>
+        /// The generated wallet is not persisted by PlayTradeX and does
+        /// not replace the SDK-managed identity wallet.
+        ///
+        /// The returned private key belongs to the calling application.
+        /// </remarks>
+        public static Task<GenerateWalletResponse> GenerateWalletAsync(
+            bool sequential = false)
+        {
+            CaptureUnityContext();
+
+            var completion =
+                new TaskCompletionSource<GenerateWalletResponse>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+            IntPtr userData =
+                CreateRequestContext<GenerateWalletResponse>(
+                    response =>
+                    {
+                        completion.TrySetResult(
+                            response);
+                    },
+                    exception =>
+                    {
+                        completion.TrySetException(
+                            exception);
+                    });
+
+            try
+            {
+                CPlayTradeXNative.CPlayTradeX_GenerateWallet(
+                    NativeGenerateWalletCallback,
+                    userData,
+                    sequential ? 1 : 0);
+            }
+            catch (Exception exception)
+            {
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
+            }
+
+            return completion.Task;
+        }
+
+
+        [MonoPInvokeCallback(
+            typeof(CPlayTradeXNative.GenerateWalletCallback))]
+        private static void OnNativeGenerateWallet(
+            CPlayTradeXNative.GenerateWalletResponse nativeResponse,
+            IntPtr userData)
+        {
+            try
+            {
+                RequestContext<GenerateWalletResponse> context =
+                    GetRequestContext<GenerateWalletResponse>(
+                        userData);
+
+                GeneratedWallet wallet =
+                    new GeneratedWallet(
+                        CPlayTradeXNative.GetString(
+                            nativeResponse.wallet.address),
+
+                        CPlayTradeXNative.GetString(
+                            nativeResponse.wallet.publicKey),
+
+                        CPlayTradeXNative.GetString(
+                            nativeResponse.wallet.privateKey));
+
+
+                GenerateWalletResponse response =
+                    new GenerateWalletResponse(
+                        nativeResponse.success != 0,
+                        nativeResponse.errorCode,
+                        wallet,
+
+                        CPlayTradeXNative.GetString(
+                            nativeResponse.errorMessage));
+
+
+                InvokeOnUnityThread(
+                    context?.Callback,
+                    response);
+            }
+            catch (Exception exception)
+            {
+                RequestContext<GenerateWalletResponse> context =
+                    GetRequestContext<GenerateWalletResponse>(
+                        userData);
+
+                context?.ErrorCallback?.Invoke(
+                    exception);
+
+                SafeLogError(
+                    "[PlayTradeX Unity] Generate wallet callback failed: " +
+                    exception);
+            }
+            finally
+            {
+                FreeRequestContext(
+                    userData);
+            }
+        }
+
+
+        // ========================================================
         // Initialize
         // ========================================================
 
         /// <summary>
-        /// Starts native PlayTradeX SDK initialization.
+        /// Initializes PlayTradeX with all configured blockchain networks.
         /// </summary>
-        private static void Initialize(
+        public static Task<InitializeResult> InitializeAsync(
             string storagePath,
-            string rpc,
-            long chainId,
-            Action<InitializeResult> callback,
-            Action<Exception> errorCallback)
+            NetworkConfig[] networks)
         {
             CaptureUnityContext();
+
             SetupLogging();
 
+
+            var completion =
+                new TaskCompletionSource<InitializeResult>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+
+            if (string.IsNullOrWhiteSpace(
+                    storagePath))
+            {
+                completion.TrySetException(
+                    new ArgumentException(
+                        "Storage path is required.",
+                        nameof(storagePath)));
+
+                return completion.Task;
+            }
+
+
+            if (networks == null)
+            {
+                completion.TrySetException(
+                    new ArgumentNullException(
+                        nameof(networks)));
+
+                return completion.Task;
+            }
+
+
+            if (networks.Length == 0)
+            {
+                completion.TrySetException(
+                    new ArgumentException(
+                        "At least one network must be configured.",
+                        nameof(networks)));
+
+                return completion.Task;
+            }
+
+
             IntPtr userData =
-                CreateRequestContext(
-                    callback,
-                    errorCallback);
+                IntPtr.Zero;
 
             try
             {
-                CPlayTradeXNative.CPlayTradeX_Initialize(
-                    storagePath ?? string.Empty,
-                    rpc ?? string.Empty,
-                    chainId,
-                    NativeInitializeCallback,
-                    userData);
+                /*
+                 * Validate and marshal before allocating callback state.
+                 * This prevents a GCHandle from being allocated when the
+                 * configuration itself is invalid.
+                 */
+
+                using (var nativeNetworks =
+                       new NativeNetworkAllocation(
+                           networks))
+                {
+                    userData =
+                        CreateRequestContext<InitializeResult>(
+                            result =>
+                            {
+                                completion.TrySetResult(
+                                    result);
+                            },
+                            exception =>
+                            {
+                                completion.TrySetException(
+                                    exception);
+                            });
+
+
+                    CPlayTradeXNative.CPlayTradeX_Initialize(
+                        storagePath,
+                        nativeNetworks.NetworkArray,
+                        nativeNetworks.NetworkCount,
+                        NativeInitializeCallback,
+                        userData);
+                }
             }
-            catch
+            catch (Exception exception)
             {
-                Debug.LogError("This is an error");
-                FreeRequestContext(userData);
-                throw;
+                if (userData != IntPtr.Zero)
+                {
+                    FreeRequestContext(
+                        userData);
+                }
+
+                completion.TrySetException(
+                    exception);
             }
+
+            return completion.Task;
         }
 
-        [MonoPInvokeCallback(typeof(CPlayTradeXNative.InitializeCallback))]
-        private static void OnNativeInitialize(CPlayTradeXNative.InitializeResult nativeResult, IntPtr userData)
+
+        [MonoPInvokeCallback(
+            typeof(CPlayTradeXNative.InitializeCallback))]
+        private static void OnNativeInitialize(
+            CPlayTradeXNative.InitializeResult nativeResult,
+            IntPtr userData)
         {
             try
             {
                 RequestContext<InitializeResult> context =
-                    GetRequestContext<InitializeResult>(userData);
+                    GetRequestContext<InitializeResult>(
+                        userData);
+
 
                 InitializeResult result =
                     new InitializeResult(
                         nativeResult.initialized != 0,
+
                         CPlayTradeXNative.GetString(
                             nativeResult.error),
+
                         CPlayTradeXNative.GetString(
                             nativeResult.walletAddress));
+
 
                 RunOnUnityThread(() =>
                 {
@@ -180,16 +733,19 @@ namespace PlayTradeX
 
                     SafeInvoke(() =>
                     {
-                        context?.Callback?.Invoke(result);
+                        context?.Callback?.Invoke(
+                            result);
                     });
                 });
             }
             catch (Exception exception)
             {
                 RequestContext<InitializeResult> context =
-                    GetRequestContext<InitializeResult>(userData);
+                    GetRequestContext<InitializeResult>(
+                        userData);
 
-                context?.ErrorCallback?.Invoke(exception);
+                context?.ErrorCallback?.Invoke(
+                    exception);
 
                 SafeLogError(
                     "[PlayTradeX Unity] Initialize callback failed: " +
@@ -197,56 +753,9 @@ namespace PlayTradeX
             }
             finally
             {
-                FreeRequestContext(userData);
+                FreeRequestContext(
+                    userData);
             }
-        }
-
-        /// <summary>
-        /// Initializes the PlayTradeX SDK.
-        /// </summary>
-        /// <param name="storagePath">
-        /// Directory used by PlayTradeX for SDK storage.
-        /// </param>
-        /// <param name="rpc">
-        /// Blockchain RPC endpoint used by the SDK.
-        /// </param>
-        /// <param name="chainId">
-        /// Blockchain chain ID.
-        /// </param>
-        /// <returns>
-        /// A task that completes when native SDK initialization
-        /// finishes.
-        /// </returns>
-        public static Task<InitializeResult> InitializeAsync(
-            string storagePath,
-            string rpc,
-            long chainId)
-        {
-            var completion =
-                new TaskCompletionSource<InitializeResult>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-
-            try
-            {
-                Initialize(
-                    storagePath,
-                    rpc,
-                    chainId,
-                    result =>
-                    {
-                        completion.TrySetResult(result);
-                    },
-                    exception =>
-                    {
-                        completion.TrySetException(exception);
-                    });
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-
-            return completion.Task;
         }
 
 
@@ -255,13 +764,8 @@ namespace PlayTradeX
         // ========================================================
 
         /// <summary>
-        /// Gracefully shuts down the native PlayTradeX SDK.
+        /// Shuts down the native PlayTradeX SDK.
         /// </summary>
-        /// <remarks>
-        /// Native shutdown drains operations according to PlayTradeX
-        /// shutdown semantics and releases managed native callback
-        /// references after native work has completed.
-        /// </remarks>
         public static void Shutdown()
         {
             bool wasInitialized = false;
@@ -279,18 +783,22 @@ namespace PlayTradeX
                     wasInitialized = false;
                 }
 
-                // Native shutdown drains already queued/running
-                // operations according to PlayTradeX semantics.
-                CPlayTradeXNative.CPlayTradeX_Shutdown();
+
+                CPlayTradeXNative
+                    .CPlayTradeX_Shutdown();
+
 
                 if (wasInitialized)
                 {
-                    NotifyInitializationChanged(false);
+                    NotifyInitializationChanged(
+                        false);
                 }
             }
             finally
             {
-                _transactionConsentCallback = null;
+                _transactionConsentCallback =
+                    null;
+
 
                 try
                 {
@@ -304,6 +812,7 @@ namespace PlayTradeX
                     // Shutdown cleanup must remain safe.
                 }
 
+
                 try
                 {
                     CPlayTradeXNative.SetLogCallback(
@@ -315,7 +824,9 @@ namespace PlayTradeX
                     // Shutdown cleanup must remain safe.
                 }
 
-                _loggingRegistered = false;
+
+                _loggingRegistered =
+                    false;
             }
         }
 
@@ -325,11 +836,8 @@ namespace PlayTradeX
         // ========================================================
 
         /// <summary>
-        /// Gets whether the native PlayTradeX SDK is fully initialized.
+        /// Returns whether the native SDK is initialized.
         /// </summary>
-        /// <returns>
-        /// True when the SDK is initialized; otherwise false.
-        /// </returns>
         public static bool IsInitialized()
         {
             try
@@ -353,148 +861,292 @@ namespace PlayTradeX
         // ========================================================
 
         /// <summary>
-        /// Registers the callback invoked when a prepared transaction
-        /// requires approval from the application.
+        /// Registers the application callback that receives prepared
+        /// transactions requiring user consent.
         /// </summary>
-        /// <param name="callback">
-        /// Callback that receives the prepared transaction.
-        /// Pass null to unregister the current callback.
-        /// </param>
         public static void SetTransactionConsentCallback(
             Action<PreparedTransaction> callback)
         {
             CaptureUnityContext();
 
-            _transactionConsentCallback = callback;
+            _transactionConsentCallback =
+                callback;
+
 
             if (callback == null)
             {
                 CPlayTradeXNative
                     .CPlayTradeX_SetTransactionConsentCallback(
-                        null, IntPtr.Zero);
+                        null,
+                        IntPtr.Zero);
 
                 return;
             }
 
+
             CPlayTradeXNative
                 .CPlayTradeX_SetTransactionConsentCallback(
-                    NativeTransactionConsentCallback, IntPtr.Zero);
+                    NativeTransactionConsentCallback,
+                    IntPtr.Zero);
         }
 
-        [MonoPInvokeCallback(typeof(CPlayTradeXNative.TransactionConsentCallback))]
+
+        [MonoPInvokeCallback(
+            typeof(CPlayTradeXNative.TransactionConsentCallback))]
         private static void OnNativeTransactionConsent(
-            CPlayTradeXNative.PreparedTransaction nativeTransaction, IntPtr userData)
+            CPlayTradeXNative.PreparedTransaction nativeTransaction,
+            IntPtr userData)
         {
+            /*
+             * Every native pointer must be copied before returning from
+             * this callback.
+             */
+
             PreparedTransaction transaction =
                 new PreparedTransaction(
                     CPlayTradeXNative.GetString(
                         nativeTransaction.id),
+
+                    CPlayTradeXNative.GetString(
+                        nativeTransaction.networkId),
+
+                    nativeTransaction.chainId,
+
+                    CPlayTradeXNative.GetString(
+                        nativeTransaction.fromAddress),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.rpc),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.contractAddress),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.abi),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.functionName),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.params_),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.value),
+
                     nativeTransaction.gasLimit,
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.baseFeePerGas),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.maxPriorityFeePerGas),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.maxFeePerGas),
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.estimatedMaxNetworkFee),
+
                     nativeTransaction.simulationSucceeded != 0,
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.simulationError),
+
                     nativeTransaction.canSubmit != 0,
+
                     CPlayTradeXNative.GetString(
                         nativeTransaction.preparationError));
 
-            Action<PreparedTransaction> managedCallback =
+
+            Action<PreparedTransaction> callback =
                 _transactionConsentCallback;
 
+
             InvokeOnUnityThread(
-                managedCallback,
+                callback,
                 transaction);
         }
+
 
         /// <summary>
         /// Approves a pending prepared transaction.
         /// </summary>
-        /// <param name="transactionId">
-        /// Identifier of the transaction to approve.
-        /// </param>
-        /// <returns>
-        /// True when the approval request was accepted by the SDK;
-        /// otherwise false.
-        /// </returns>
         public static bool ApproveTransaction(
             string transactionId)
         {
+            if (string.IsNullOrWhiteSpace(
+                    transactionId))
+            {
+                return false;
+            }
+
             return CPlayTradeXNative
                 .CPlayTradeX_ApproveTransaction(
-                    transactionId ?? string.Empty) != 0;
+                    transactionId) != 0;
         }
+
 
         /// <summary>
         /// Denies a pending prepared transaction.
         /// </summary>
-        /// <param name="transactionId">
-        /// Identifier of the transaction to deny.
-        /// </param>
-        /// <returns>
-        /// True when the denial request was accepted by the SDK;
-        /// otherwise false.
-        /// </returns>
         public static bool DenyTransaction(
             string transactionId)
         {
+            if (string.IsNullOrWhiteSpace(
+                    transactionId))
+            {
+                return false;
+            }
+
             return CPlayTradeXNative
                 .CPlayTradeX_DenyTransaction(
-                    transactionId ?? string.Empty) != 0;
+                    transactionId) != 0;
         }
 
 
         // ========================================================
-        // Native Balance
+        // Native Balance - Identity Wallet
         // ========================================================
 
-        private static void GetNativeBalance(
-            Action<NativeBalanceResponse> callback,
-            Action<Exception> errorCallback,
-            bool sequential = false)
+        /// <summary>
+        /// Gets the native currency balance of the PlayTradeX identity
+        /// wallet on the selected configured network.
+        /// </summary>
+        public static Task<NativeBalanceResponse>
+            GetNativeBalanceAsync(
+                string networkId,
+                bool sequential = false)
         {
+            ValidateNetworkId(
+                networkId);
+
             CaptureUnityContext();
 
+
+            var completion =
+                new TaskCompletionSource<NativeBalanceResponse>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+
             IntPtr userData =
-                CreateRequestContext(
-                    callback,
-                    errorCallback);
+                CreateRequestContext<NativeBalanceResponse>(
+                    response =>
+                    {
+                        completion.TrySetResult(
+                            response);
+                    },
+                    exception =>
+                    {
+                        completion.TrySetException(
+                            exception);
+                    });
+
 
             try
             {
                 CPlayTradeXNative
                     .CPlayTradeX_GetNativeBalance(
+                        networkId,
                         NativeBalanceCallback,
                         userData,
                         sequential ? 1 : 0);
             }
-            catch
+            catch (Exception exception)
             {
-                FreeRequestContext(userData);
-                throw;
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
             }
+
+
+            return completion.Task;
         }
 
-        [MonoPInvokeCallback(typeof(CPlayTradeXNative.NativeBalanceCallback))]
-        private static void OnNativeBalance(CPlayTradeXNative.NativeBalanceResponse nativeResponse, IntPtr userData)
+
+        // ========================================================
+        // Native Balance - Arbitrary Address
+        // ========================================================
+
+        /// <summary>
+        /// Gets the native currency balance of an arbitrary EVM address
+        /// on the selected configured network.
+        /// </summary>
+        /// <remarks>
+        /// No private key is required because balance lookup is a
+        /// read-only blockchain operation.
+        /// </remarks>
+        public static Task<NativeBalanceResponse>
+            GetNativeBalanceForAddressAsync(
+                string networkId,
+                string address,
+                bool sequential = false)
+        {
+            ValidateNetworkId(
+                networkId);
+
+
+            if (string.IsNullOrWhiteSpace(
+                    address))
+            {
+                throw new ArgumentException(
+                    "Wallet address is required.",
+                    nameof(address));
+            }
+
+
+            CaptureUnityContext();
+
+
+            var completion =
+                new TaskCompletionSource<NativeBalanceResponse>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+
+            IntPtr userData =
+                CreateRequestContext<NativeBalanceResponse>(
+                    response =>
+                    {
+                        completion.TrySetResult(
+                            response);
+                    },
+                    exception =>
+                    {
+                        completion.TrySetException(
+                            exception);
+                    });
+
+
+            try
+            {
+                CPlayTradeXNative
+                    .CPlayTradeX_GetNativeBalanceForAddress(
+                        networkId,
+                        address,
+                        NativeBalanceCallback,
+                        userData,
+                        sequential ? 1 : 0);
+            }
+            catch (Exception exception)
+            {
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
+            }
+
+
+            return completion.Task;
+        }
+
+
+        [MonoPInvokeCallback(
+            typeof(CPlayTradeXNative.NativeBalanceCallback))]
+        private static void OnNativeBalance(
+            CPlayTradeXNative.NativeBalanceResponse nativeResponse,
+            IntPtr userData)
         {
             try
             {
@@ -502,16 +1154,21 @@ namespace PlayTradeX
                     GetRequestContext<NativeBalanceResponse>(
                         userData);
 
+
                 NativeBalanceResponse response =
                     new NativeBalanceResponse(
                         nativeResponse.success != 0,
                         nativeResponse.errorCode,
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.body),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.errorMessage),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.balance));
+
 
                 InvokeOnUnityThread(
                     context?.Callback,
@@ -520,9 +1177,11 @@ namespace PlayTradeX
             catch (Exception exception)
             {
                 RequestContext<NativeBalanceResponse> context =
-                    GetRequestContext<NativeBalanceResponse>(userData);
+                    GetRequestContext<NativeBalanceResponse>(
+                        userData);
 
-                context?.ErrorCallback?.Invoke(exception);
+                context?.ErrorCallback?.Invoke(
+                    exception);
 
                 SafeLogError(
                     "[PlayTradeX Unity] Native balance callback failed: " +
@@ -530,90 +1189,168 @@ namespace PlayTradeX
             }
             finally
             {
-                FreeRequestContext(userData);
+                FreeRequestContext(
+                    userData);
             }
         }
 
+
+        // ========================================================
+        // Send Native Currency - Identity Wallet
+        // ========================================================
+
         /// <summary>
-        /// Gets the native currency balance of the SDK wallet.
+        /// Sends native blockchain currency using the SDK-managed
+        /// PlayTradeX identity wallet.
         /// </summary>
-        /// <param name="sequential">
-        /// When true, the request participates in sequential
-        /// request execution.
-        /// </param>
-        /// <returns>
-        /// A task containing the native balance response.
-        /// </returns>
-        public static Task<NativeBalanceResponse>
-            GetNativeBalanceAsync(
-                bool sequential = false)
+        public static Task<TransactionResponse> SendEthAsync(
+            string networkId,
+            string to,
+            string amount,
+            bool sequential = false)
         {
+            ValidateNetworkId(
+                networkId);
+
+            ValidateSendParameters(
+                to,
+                amount);
+
+            CaptureUnityContext();
+
+
             var completion =
-                new TaskCompletionSource<NativeBalanceResponse>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
+                CreateTransactionCompletion();
+
+
+            IntPtr userData =
+                CreateTransactionRequestContext(
+                    completion);
+
 
             try
             {
-                GetNativeBalance(
-                    response =>
-                    {
-                        completion.TrySetResult(response);
-                    },
-                    exception =>
-                    {
-                        completion.TrySetException(exception);
-                    },
-                    sequential);
+                CPlayTradeXNative.CPlayTradeX_SendEth(
+                    networkId,
+                    to,
+                    amount,
+                    NativeTransactionCallback,
+                    userData,
+                    sequential ? 1 : 0);
             }
             catch (Exception exception)
             {
-                completion.TrySetException(exception);
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
             }
+
 
             return completion.Task;
         }
 
 
         // ========================================================
-        // Send Native Currency
+        // Send Native Currency - External Wallet
         // ========================================================
 
-        private static void SendEth(
+        /// <summary>
+        /// Sends native blockchain currency using an application-managed
+        /// external wallet.
+        /// </summary>
+        /// <remarks>
+        /// The private key is supplied only for this execution.
+        /// The native SDK does not persist it as the PlayTradeX
+        /// identity wallet.
+        /// </remarks>
+        public static Task<TransactionResponse> SendEthWithWalletAsync(
+            string networkId,
+            string privateKey,
             string to,
             string amount,
-            Action<TransactionResponse> callback,
-            Action<Exception> errorCallback,
             bool sequential = false)
         {
+            ValidateNetworkId(
+                networkId);
+
+            ValidatePrivateKey(
+                privateKey);
+
+            ValidateSendParameters(
+                to,
+                amount);
+
             CaptureUnityContext();
 
 
+            var completion =
+                CreateTransactionCompletion();
+
+
             IntPtr userData =
-                CreateRequestContext(
-                    callback,
-                    errorCallback);
+                CreateTransactionRequestContext(
+                    completion);
+
 
             try
             {
-                CPlayTradeXNative.CPlayTradeX_SendEth(
-                    to ?? string.Empty,
-                    amount ?? string.Empty,
-                    NativeTransactionCallback,
-                    userData,
-                    sequential ? 1 : 0);
+                CPlayTradeXNative
+                    .CPlayTradeX_SendEthWithWallet(
+                        networkId,
+                        privateKey,
+                        to,
+                        amount,
+                        NativeTransactionCallback,
+                        userData,
+                        sequential ? 1 : 0);
             }
-            catch
+            catch (Exception exception)
             {
-                FreeRequestContext(userData);
-                throw;
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
+            }
+
+
+            return completion.Task;
+        }
+
+
+        private static void ValidateSendParameters(
+            string to,
+            string amount)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    to))
+            {
+                throw new ArgumentException(
+                    "Recipient address is required.",
+                    nameof(to));
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    amount))
+            {
+                throw new ArgumentException(
+                    "Amount is required.",
+                    nameof(amount));
             }
         }
 
+
+        // ========================================================
+        // Transaction Callback
+        // ========================================================
+
         [MonoPInvokeCallback(
-    typeof(CPlayTradeXNative.TransactionCallback))]
+            typeof(CPlayTradeXNative.TransactionCallback))]
         private static void OnNativeTransaction(
-    CPlayTradeXNative.TransactionResponse nativeResponse,
-    IntPtr userData)
+            CPlayTradeXNative.TransactionResponse nativeResponse,
+            IntPtr userData)
         {
             try
             {
@@ -621,8 +1358,11 @@ namespace PlayTradeX
                     GetRequestContext<TransactionResponse>(
                         userData);
 
+
                 TransactionResponse response =
-                    CreateTransactionResponse(nativeResponse);
+                    CreateTransactionResponse(
+                        nativeResponse);
+
 
                 InvokeOnUnityThread(
                     context?.Callback,
@@ -631,9 +1371,11 @@ namespace PlayTradeX
             catch (Exception exception)
             {
                 RequestContext<TransactionResponse> context =
-                    GetRequestContext<TransactionResponse>(userData);
+                    GetRequestContext<TransactionResponse>(
+                        userData);
 
-                context?.ErrorCallback?.Invoke(exception);
+                context?.ErrorCallback?.Invoke(
+                    exception);
 
                 SafeLogError(
                     "[PlayTradeX Unity] Transaction callback failed: " +
@@ -641,56 +1383,9 @@ namespace PlayTradeX
             }
             finally
             {
-                FreeRequestContext(userData);
+                FreeRequestContext(
+                    userData);
             }
-        }
-
-        /// <summary>
-        /// Sends native blockchain currency from the SDK wallet.
-        /// </summary>
-        /// <param name="to">
-        /// Destination wallet address.
-        /// </param>
-        /// <param name="amount">
-        /// Amount of native currency to send.
-        /// </param>
-        /// <param name="sequential">
-        /// When true, the request participates in sequential
-        /// request execution.
-        /// </param>
-        /// <returns>
-        /// A task containing the transaction response.
-        /// </returns>
-        public static Task<TransactionResponse> SendEthAsync(
-            string to,
-            string amount,
-            bool sequential = false)
-        {
-            var completion =
-                new TaskCompletionSource<TransactionResponse>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-
-            try
-            {
-                SendEth(
-                    to,
-                    amount,
-                    response =>
-                    {
-                        completion.TrySetResult(response);
-                    },
-                    exception =>
-                    {
-                        completion.TrySetException(exception);
-                    },
-                    sequential);
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-
-            return completion.Task;
         }
 
 
@@ -698,19 +1393,37 @@ namespace PlayTradeX
         // Human Readable ABI
         // ========================================================
 
-        private static void HumanReadableAbi(
-            string abi,
-            bool minimal,
-            Action<HumanReadableAbiResponse> callback,
-            Action<Exception> errorCallback,
-            bool sequential = false)
+        /// <summary>
+        /// Converts a contract ABI into PlayTradeX human-readable ABI
+        /// format.
+        /// </summary>
+        public static Task<HumanReadableAbiResponse>
+            HumanReadableAbiAsync(
+                string abi,
+                bool minimal,
+                bool sequential = false)
         {
             CaptureUnityContext();
 
+
+            var completion =
+                new TaskCompletionSource<HumanReadableAbiResponse>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+
             IntPtr userData =
-                CreateRequestContext(
-                    callback,
-                    errorCallback);
+                CreateRequestContext<HumanReadableAbiResponse>(
+                    response =>
+                    {
+                        completion.TrySetResult(
+                            response);
+                    },
+                    exception =>
+                    {
+                        completion.TrySetException(
+                            exception);
+                    });
+
 
             try
             {
@@ -719,21 +1432,27 @@ namespace PlayTradeX
                         abi ?? string.Empty,
                         minimal ? 1 : 0,
                         NativeHumanReadableAbiCallback,
-                userData,
-                        sequential ? 1 : 0);
+                        userData);
             }
-            catch
+            catch (Exception exception)
             {
-                FreeRequestContext(userData);
-                throw;
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
             }
+
+
+            return completion.Task;
         }
 
+
         [MonoPInvokeCallback(
-    typeof(CPlayTradeXNative.HumanReadableAbiCallback))]
+            typeof(CPlayTradeXNative.HumanReadableAbiCallback))]
         private static void OnNativeHumanReadableAbi(
-    CPlayTradeXNative.HumanReadableAbiResponse nativeResponse,
-    IntPtr userData)
+            CPlayTradeXNative.HumanReadableAbiResponse nativeResponse,
+            IntPtr userData)
         {
             try
             {
@@ -741,16 +1460,21 @@ namespace PlayTradeX
                     GetRequestContext<HumanReadableAbiResponse>(
                         userData);
 
+
                 HumanReadableAbiResponse response =
                     new HumanReadableAbiResponse(
                         nativeResponse.success != 0,
                         nativeResponse.errorCode,
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.body),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.errorMessage),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.abi));
+
 
                 InvokeOnUnityThread(
                     context?.Callback,
@@ -759,9 +1483,11 @@ namespace PlayTradeX
             catch (Exception exception)
             {
                 RequestContext<HumanReadableAbiResponse> context =
-                    GetRequestContext<HumanReadableAbiResponse>(userData);
+                    GetRequestContext<HumanReadableAbiResponse>(
+                        userData);
 
-                context?.ErrorCallback?.Invoke(exception);
+                context?.ErrorCallback?.Invoke(
+                    exception);
 
                 SafeLogError(
                     "[PlayTradeX Unity] Human-readable ABI callback failed: " +
@@ -769,161 +1495,176 @@ namespace PlayTradeX
             }
             finally
             {
-                FreeRequestContext(userData);
+                FreeRequestContext(
+                    userData);
             }
         }
+
+
+        // ========================================================
+        // Contract Write - Identity Wallet
+        // ========================================================
 
         /// <summary>
-        /// Converts a contract ABI into a human-readable ABI.
+        /// Executes a state-changing contract operation using the
+        /// SDK-managed PlayTradeX identity wallet.
         /// </summary>
-        /// <param name="abi">
-        /// Contract ABI to convert.
-        /// </param>
-        /// <param name="minimal">
-        /// Whether to return the minimal human-readable form.
-        /// </param>
-        /// <param name="sequential">
-        /// When true, the request participates in sequential
-        /// request execution.
-        /// </param>
-        /// <returns>
-        /// A task containing the human-readable ABI response.
-        /// </returns>
-        public static Task<HumanReadableAbiResponse>
-            HumanReadableAbiAsync(
-                string abi,
-                bool minimal,
-                bool sequential = false)
-        {
-            var completion =
-                new TaskCompletionSource<HumanReadableAbiResponse>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-
-            try
-            {
-                HumanReadableAbi(
-                    abi,
-                    minimal,
-                    response =>
-                    {
-                        completion.TrySetResult(response);
-                    },
-                    exception =>
-                    {
-                        completion.TrySetException(exception);
-                    },
-                    sequential);
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-
-            return completion.Task;
-        }
-
-
-        // ========================================================
-        // Contract Write
-        // ========================================================
-
-        private static void Write(
+        public static Task<TransactionResponse> WriteAsync(
+            string networkId,
             string contractAddress,
             string abi,
             string functionName,
             string parameters,
-            Action<TransactionResponse> callback,
-            Action<Exception> errorCallback,
-            string value = "",
+            string value = "0",
             bool sequential = false)
         {
+            ValidateNetworkId(
+                networkId);
+
+            ValidateWriteParameters(
+                contractAddress,
+                abi,
+                functionName);
+
+
             CaptureUnityContext();
 
+
+            var completion =
+                CreateTransactionCompletion();
+
+
             IntPtr userData =
-                CreateRequestContext(
-                    callback,
-                    errorCallback);
+                CreateTransactionRequestContext(
+                    completion);
 
 
             try
             {
                 CPlayTradeXNative.CPlayTradeX_Write(
-                    contractAddress ?? string.Empty,
-                    abi ?? string.Empty,
-                    functionName ?? string.Empty,
+                    networkId,
+                    contractAddress,
+                    abi,
+                    functionName,
                     parameters ?? string.Empty,
-                    NativeTransactionCallback, userData,
-                    value ?? string.Empty,
+                    NativeTransactionCallback,
+                    userData,
+                    string.IsNullOrEmpty(value) ? "0" : value,
                     sequential ? 1 : 0);
             }
-            catch
+            catch (Exception exception)
             {
-                FreeRequestContext(userData);
-                throw;
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
             }
+
+
+            return completion.Task;
         }
 
+
+        // ========================================================
+        // Contract Write - External Wallet
+        // ========================================================
+
         /// <summary>
-        /// Executes a state-changing smart contract function.
+        /// Executes a state-changing contract operation using an
+        /// application-managed external wallet.
         /// </summary>
-        /// <param name="contractAddress">
-        /// Target smart contract address.
-        /// </param>
-        /// <param name="abi">
-        /// Contract ABI.
-        /// </param>
-        /// <param name="functionName">
-        /// Contract function to execute.
-        /// </param>
-        /// <param name="parameters">
-        /// Serialized function parameters.
-        /// </param>
-        /// <param name="value">
-        /// Native currency value attached to the transaction.
-        /// </param>
-        /// <param name="sequential">
-        /// When true, the request participates in sequential
-        /// request execution.
-        /// </param>
-        /// <returns>
-        /// A task containing the transaction response.
-        /// </returns>
-        public static Task<TransactionResponse> WriteAsync(
+        public static Task<TransactionResponse> WriteWithWalletAsync(
+            string networkId,
+            string privateKey,
             string contractAddress,
             string abi,
             string functionName,
             string parameters,
-            string value = "",
+            string value = "0",
             bool sequential = false)
         {
+            ValidateNetworkId(
+                networkId);
+
+            ValidatePrivateKey(
+                privateKey);
+
+            ValidateWriteParameters(
+                contractAddress,
+                abi,
+                functionName);
+
+
+            CaptureUnityContext();
+
+
             var completion =
-                new TaskCompletionSource<TransactionResponse>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
+                CreateTransactionCompletion();
+
+
+            IntPtr userData =
+                CreateTransactionRequestContext(
+                    completion);
+
 
             try
             {
-                Write(
-                    contractAddress,
-                    abi,
-                    functionName,
-                    parameters,
-                    response =>
-                    {
-                        completion.TrySetResult(response);
-                    },
-                    exception =>
-                    {
-                        completion.TrySetException(exception);
-                    },
-                    value,
-                    sequential);
+                CPlayTradeXNative
+                    .CPlayTradeX_WriteWithWallet(
+                        networkId,
+                        privateKey,
+                        contractAddress,
+                        abi,
+                        functionName,
+                        parameters ?? string.Empty,
+                        NativeTransactionCallback,
+                        userData,
+                        string.IsNullOrEmpty(value) ? "0" : value,
+                        sequential ? 1 : 0);
             }
             catch (Exception exception)
             {
-                completion.TrySetException(exception);
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
             }
 
+
             return completion.Task;
+        }
+
+
+        private static void ValidateWriteParameters(
+            string contractAddress,
+            string abi,
+            string functionName)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    contractAddress))
+            {
+                throw new ArgumentException(
+                    "Contract address is required.",
+                    nameof(contractAddress));
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    abi))
+            {
+                throw new ArgumentException(
+                    "Contract ABI is required.",
+                    nameof(abi));
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    functionName))
+            {
+                throw new ArgumentException(
+                    "Contract function name is required.",
+                    nameof(functionName));
+            }
         }
 
 
@@ -931,44 +1672,84 @@ namespace PlayTradeX
         // Contract Read
         // ========================================================
 
-        private static void Read(
+        /// <summary>
+        /// Executes a read-only smart contract call on the selected
+        /// configured network.
+        /// </summary>
+        /// <remarks>
+        /// Read does not require an identity or external wallet because
+        /// no transaction is signed.
+        /// </remarks>
+        public static Task<ContractReadResponse> ReadAsync(
+            string networkId,
             string contractAddress,
             string abi,
             string functionName,
             string parameters,
-            Action<ContractReadResponse> callback,
-            Action<Exception> errorCallback,
             bool sequential = false)
         {
+            ValidateNetworkId(
+                networkId);
+
+            ValidateWriteParameters(
+                contractAddress,
+                abi,
+                functionName);
+
+
             CaptureUnityContext();
 
+
+            var completion =
+                new TaskCompletionSource<ContractReadResponse>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+
             IntPtr userData =
-                CreateRequestContext(
-                    callback,
-                    errorCallback);
+                CreateRequestContext<ContractReadResponse>(
+                    response =>
+                    {
+                        completion.TrySetResult(
+                            response);
+                    },
+                    exception =>
+                    {
+                        completion.TrySetException(
+                            exception);
+                    });
+
 
             try
             {
                 CPlayTradeXNative.CPlayTradeX_Read(
-                    contractAddress ?? string.Empty,
-                    abi ?? string.Empty,
-                    functionName ?? string.Empty,
+                    networkId,
+                    contractAddress,
+                    abi,
+                    functionName,
                     parameters ?? string.Empty,
-                    NativeContractReadCallback, userData,
+                    NativeContractReadCallback,
+                    userData,
                     sequential ? 1 : 0);
             }
-            catch
+            catch (Exception exception)
             {
-                FreeRequestContext(userData);
-                throw;
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
             }
+
+
+            return completion.Task;
         }
 
+
         [MonoPInvokeCallback(
-    typeof(CPlayTradeXNative.ContractReadCallback))]
+            typeof(CPlayTradeXNative.ContractReadCallback))]
         private static void OnNativeContractRead(
-    CPlayTradeXNative.ContractReadResponse nativeResponse,
-    IntPtr userData)
+            CPlayTradeXNative.ContractReadResponse nativeResponse,
+            IntPtr userData)
         {
             try
             {
@@ -976,16 +1757,21 @@ namespace PlayTradeX
                     GetRequestContext<ContractReadResponse>(
                         userData);
 
+
                 ContractReadResponse response =
                     new ContractReadResponse(
                         nativeResponse.success != 0,
                         nativeResponse.errorCode,
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.body),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.errorMessage),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.data));
+
 
                 InvokeOnUnityThread(
                     context?.Callback,
@@ -994,9 +1780,11 @@ namespace PlayTradeX
             catch (Exception exception)
             {
                 RequestContext<ContractReadResponse> context =
-                    GetRequestContext<ContractReadResponse>(userData);
+                    GetRequestContext<ContractReadResponse>(
+                        userData);
 
-                context?.ErrorCallback?.Invoke(exception);
+                context?.ErrorCallback?.Invoke(
+                    exception);
 
                 SafeLogError(
                     "[PlayTradeX Unity] Contract read callback failed: " +
@@ -1004,107 +1792,80 @@ namespace PlayTradeX
             }
             finally
             {
-                FreeRequestContext(userData);
+                FreeRequestContext(
+                    userData);
             }
         }
+
+
+        // ========================================================
+        // Identity Wallet Export
+        // ========================================================
 
         /// <summary>
-        /// Executes a read-only smart contract function.
+        /// Exports the SDK-managed PlayTradeX identity wallet to an
+        /// encrypted wallet backup.
         /// </summary>
-        /// <param name="contractAddress">
-        /// Target smart contract address.
-        /// </param>
-        /// <param name="abi">
-        /// Contract ABI.
-        /// </param>
-        /// <param name="functionName">
-        /// Contract function to execute.
-        /// </param>
-        /// <param name="parameters">
-        /// Serialized function parameters.
-        /// </param>
-        /// <param name="sequential">
-        /// When true, the request participates in sequential
-        /// request execution.
-        /// </param>
-        /// <returns>
-        /// A task containing the contract read response.
-        /// </returns>
-        public static Task<ContractReadResponse> ReadAsync(
-            string contractAddress,
-            string abi,
-            string functionName,
-            string parameters,
-            bool sequential = false)
-        {
-            var completion =
-                new TaskCompletionSource<ContractReadResponse>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-
-            try
-            {
-                Read(
-                    contractAddress,
-                    abi,
-                    functionName,
-                    parameters,
-                    response =>
-                    {
-                        completion.TrySetResult(response);
-                    },
-                    exception =>
-                    {
-                        completion.TrySetException(exception);
-                    },
-                    sequential);
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-
-            return completion.Task;
-        }
-
-
-        // ========================================================
-        // Wallet Export
-        // ========================================================
-
-        private static void ExportWallet(
+        /// <remarks>
+        /// This operation applies only to the PlayTradeX identity wallet.
+        /// Standalone wallets generated by GenerateWalletAsync are owned
+        /// and managed by the application.
+        /// </remarks>
+        public static Task<WalletExportResponse> ExportWalletAsync(
             string password,
             string outputPath,
-            Action<WalletExportResponse> callback,
-            Action<Exception> errorCallback,
             bool sequential = false)
         {
             CaptureUnityContext();
 
+
+            var completion =
+                new TaskCompletionSource<WalletExportResponse>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+
             IntPtr userData =
-                CreateRequestContext(
-                    callback,
-                    errorCallback);
+                CreateRequestContext<WalletExportResponse>(
+                    response =>
+                    {
+                        completion.TrySetResult(
+                            response);
+                    },
+                    exception =>
+                    {
+                        completion.TrySetException(
+                            exception);
+                    });
+
 
             try
             {
                 CPlayTradeXNative.CPlayTradeX_ExportWallet(
                     password ?? string.Empty,
                     outputPath ?? string.Empty,
-                    NativeWalletExportCallback, userData,
+                    NativeWalletExportCallback,
+                    userData,
                     sequential ? 1 : 0);
             }
-            catch
+            catch (Exception exception)
             {
-                FreeRequestContext(userData);
-                throw;
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
             }
+
+
+            return completion.Task;
         }
 
+
         [MonoPInvokeCallback(
-    typeof(CPlayTradeXNative.WalletExportCallback))]
+            typeof(CPlayTradeXNative.WalletExportCallback))]
         private static void OnNativeWalletExport(
-    CPlayTradeXNative.WalletExportResponse nativeResponse,
-    IntPtr userData)
+            CPlayTradeXNative.WalletExportResponse nativeResponse,
+            IntPtr userData)
         {
             try
             {
@@ -1112,18 +1873,24 @@ namespace PlayTradeX
                     GetRequestContext<WalletExportResponse>(
                         userData);
 
+
                 WalletExportResponse response =
                     new WalletExportResponse(
                         nativeResponse.success != 0,
                         nativeResponse.errorCode,
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.body),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.errorMessage),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.walletAddress),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.filePath));
+
 
                 InvokeOnUnityThread(
                     context?.Callback,
@@ -1132,9 +1899,11 @@ namespace PlayTradeX
             catch (Exception exception)
             {
                 RequestContext<WalletExportResponse> context =
-                    GetRequestContext<WalletExportResponse>(userData);
+                    GetRequestContext<WalletExportResponse>(
+                        userData);
 
-                context?.ErrorCallback?.Invoke(exception);
+                context?.ErrorCallback?.Invoke(
+                    exception);
 
                 SafeLogError(
                     "[PlayTradeX Unity] Wallet export callback failed: " +
@@ -1142,78 +1911,45 @@ namespace PlayTradeX
             }
             finally
             {
-                FreeRequestContext(userData);
+                FreeRequestContext(
+                    userData);
             }
         }
+
+
+        // ========================================================
+        // Identity Wallet Import
+        // ========================================================
 
         /// <summary>
-        /// Exports the current SDK wallet to an encrypted wallet file.
+        /// Imports an encrypted PlayTradeX identity-wallet backup.
         /// </summary>
-        /// <param name="password">
-        /// Password used to protect the exported wallet.
-        /// </param>
-        /// <param name="outputPath">
-        /// Destination file path or supported platform URI.
-        /// </param>
-        /// <param name="sequential">
-        /// When true, the request participates in sequential
-        /// request execution.
-        /// </param>
-        /// <returns>
-        /// A task containing the wallet export response.
-        /// </returns>
-        public static Task<WalletExportResponse> ExportWalletAsync(
+        public static Task<WalletImportResponse> ImportWalletAsync(
             string password,
-            string outputPath,
+            string inputPath,
             bool sequential = false)
         {
-            var completion =
-                new TaskCompletionSource<WalletExportResponse>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-
-            try
-            {
-                ExportWallet(
-                    password,
-                    outputPath,
-                    response =>
-                    {
-                        completion.TrySetResult(response);
-                    },
-                    exception =>
-                    {
-                        completion.TrySetException(exception);
-                    },
-                    sequential);
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-
-            return completion.Task;
-        }
-
-        private static Task<WalletImportResponse> ImportWalletAsyncInternal(
-    string password,
-    string inputPath)
-        {
             CaptureUnityContext();
+
 
             var completion =
                 new TaskCompletionSource<WalletImportResponse>(
                     TaskCreationOptions.RunContinuationsAsynchronously);
 
+
             IntPtr userData =
                 CreateRequestContext<WalletImportResponse>(
                     response =>
                     {
-                        completion.TrySetResult(response);
+                        completion.TrySetResult(
+                            response);
                     },
                     exception =>
                     {
-                        completion.TrySetException(exception);
+                        completion.TrySetException(
+                            exception);
                     });
+
 
             try
             {
@@ -1222,22 +1958,27 @@ namespace PlayTradeX
                     inputPath ?? string.Empty,
                     NativeWalletImportCallback,
                     userData,
-                    0);
+                    sequential ? 1 : 0);
             }
             catch (Exception exception)
             {
-                FreeRequestContext(userData);
-                completion.TrySetException(exception);
+                FreeRequestContext(
+                    userData);
+
+                completion.TrySetException(
+                    exception);
             }
+
 
             return completion.Task;
         }
 
+
         [MonoPInvokeCallback(
-    typeof(CPlayTradeXNative.WalletImportCallback))]
+            typeof(CPlayTradeXNative.WalletImportCallback))]
         private static void OnNativeWalletImport(
-    CPlayTradeXNative.WalletImportResponse nativeResponse,
-    IntPtr userData)
+            CPlayTradeXNative.WalletImportResponse nativeResponse,
+            IntPtr userData)
         {
             try
             {
@@ -1245,16 +1986,21 @@ namespace PlayTradeX
                     GetRequestContext<WalletImportResponse>(
                         userData);
 
+
                 WalletImportResponse response =
                     new WalletImportResponse(
                         nativeResponse.success != 0,
                         nativeResponse.errorCode,
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.body),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.errorMessage),
+
                         CPlayTradeXNative.GetString(
                             nativeResponse.walletAddress));
+
 
                 InvokeOnUnityThread(
                     context?.Callback,
@@ -1263,9 +2009,11 @@ namespace PlayTradeX
             catch (Exception exception)
             {
                 RequestContext<WalletImportResponse> context =
-                    GetRequestContext<WalletImportResponse>(userData);
+                    GetRequestContext<WalletImportResponse>(
+                        userData);
 
-                context?.ErrorCallback?.Invoke(exception);
+                context?.ErrorCallback?.Invoke(
+                    exception);
 
                 SafeLogError(
                     "[PlayTradeX Unity] Wallet import callback failed: " +
@@ -1273,22 +2021,40 @@ namespace PlayTradeX
             }
             finally
             {
-                FreeRequestContext(userData);
+                FreeRequestContext(
+                    userData);
             }
         }
 
-        public static Task<WalletImportResponse> ImportWalletAsync(
-    string password,
-    string inputPath)
-        {
-            return ImportWalletAsyncInternal(
-                password,
-                inputPath);
-        }
 
         // ========================================================
-        // Transaction Response Conversion
+        // Transaction Helpers
         // ========================================================
+
+        private static TaskCompletionSource<TransactionResponse>
+            CreateTransactionCompletion()
+        {
+            return new TaskCompletionSource<TransactionResponse>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+
+        private static IntPtr CreateTransactionRequestContext(
+            TaskCompletionSource<TransactionResponse> completion)
+        {
+            return CreateRequestContext<TransactionResponse>(
+                response =>
+                {
+                    completion.TrySetResult(
+                        response);
+                },
+                exception =>
+                {
+                    completion.TrySetException(
+                        exception);
+                });
+        }
+
 
         private static TransactionResponse CreateTransactionResponse(
             CPlayTradeXNative.TransactionResponse nativeResponse)
@@ -1296,12 +2062,16 @@ namespace PlayTradeX
             return new TransactionResponse(
                 nativeResponse.success != 0,
                 nativeResponse.errorCode,
+
                 CPlayTradeXNative.GetString(
                     nativeResponse.body),
+
                 CPlayTradeXNative.GetString(
                     nativeResponse.errorMessage),
+
                 CPlayTradeXNative.GetString(
                     nativeResponse.transactionHash),
+
                 CPlayTradeXNative.GetString(
                     nativeResponse.receipt));
         }
@@ -1316,24 +2086,23 @@ namespace PlayTradeX
         {
             SafeInvoke(() =>
             {
-                InitializationChanged?.Invoke(initialized);
+                InitializationChanged?.Invoke(
+                    initialized);
             });
         }
 
+
         // ========================================================
-        // Unity Main Thread
+        // Unity Main Thread Dispatch
         // ========================================================
 
         /// <summary>
-        /// Captures Unity's SynchronizationContext once.
+        /// Captures Unity's SynchronizationContext.
         /// </summary>
         /// <remarks>
-        /// The first capture must occur on Unity's main thread.
-        /// PlayTradeXLifecycle calls SetupLogging from Awake before
-        /// SDK initialization, which establishes the Unity context.
-        ///
-        /// Once captured, the context is never replaced by subsequent
-        /// SDK calls from worker threads.
+        /// The first successful capture must occur on Unity's main
+        /// thread. Once captured, the context is not replaced by calls
+        /// originating from native or worker threads.
         /// </remarks>
         private static void CaptureUnityContext()
         {
@@ -1342,13 +2111,16 @@ namespace PlayTradeX
                 return;
             }
 
+
             SynchronizationContext context =
                 SynchronizationContext.Current;
+
 
             if (context == null)
             {
                 return;
             }
+
 
             lock (UnityContextLock)
             {
@@ -1357,20 +2129,19 @@ namespace PlayTradeX
                     return;
                 }
 
-                _unitySynchronizationContext = context;
+
+                _unitySynchronizationContext =
+                    context;
+
                 _unityThreadId =
                     Thread.CurrentThread.ManagedThreadId;
             }
         }
 
+
         /// <summary>
         /// Executes an action on Unity's main thread.
         /// </summary>
-        /// <remarks>
-        /// Native callbacks may originate from PlayTradeX worker
-        /// threads. Unity-facing callbacks are therefore dispatched
-        /// through the Unity SynchronizationContext.
-        /// </remarks>
         private static void RunOnUnityThread(
             Action action)
         {
@@ -1379,33 +2150,40 @@ namespace PlayTradeX
                 return;
             }
 
+
             SynchronizationContext context =
                 _unitySynchronizationContext;
+
 
             if (context == null)
             {
                 SafeLogError(
                     "[PlayTradeX Unity] Unity SynchronizationContext " +
-                    "has not been captured. The callback was not " +
-                    "executed.");
+                    "has not been captured. The callback was not executed.");
 
                 return;
             }
+
 
             if (Thread.CurrentThread.ManagedThreadId ==
                 _unityThreadId)
             {
-                SafeInvoke(action);
+                SafeInvoke(
+                    action);
+
                 return;
             }
+
 
             context.Post(
                 _ =>
                 {
-                    SafeInvoke(action);
+                    SafeInvoke(
+                        action);
                 },
                 null);
         }
+
 
         private static void InvokeOnUnityThread<T>(
             Action<T> callback,
@@ -1416,9 +2194,11 @@ namespace PlayTradeX
                 return;
             }
 
+
             RunOnUnityThread(() =>
             {
-                callback(value);
+                callback(
+                    value);
             });
         }
 
@@ -1428,8 +2208,8 @@ namespace PlayTradeX
         // ========================================================
 
         /// <summary>
-        /// Prevents exceptions thrown by managed callbacks from
-        /// crossing a native callback boundary.
+        /// Prevents managed callback exceptions from escaping through
+        /// native callback boundaries.
         /// </summary>
         private static void SafeInvoke(
             Action action)
@@ -1438,6 +2218,7 @@ namespace PlayTradeX
             {
                 return;
             }
+
 
             try
             {
@@ -1451,37 +2232,54 @@ namespace PlayTradeX
             }
         }
 
-        /// <summary>
-        /// Logs an error without allowing Unity logging failures to
-        /// escape SDK cleanup or native callback boundaries.
-        /// </summary>
+
         private static void SafeLogError(
             string message)
         {
             try
             {
-                Debug.LogError(message);
+                Debug.LogError(
+                    message);
             }
             catch
             {
-                // Never allow logging failures to escape through
-                // SDK cleanup or a native callback boundary.
+                /*
+                 * Logging must never cause native callback cleanup
+                 * to fail.
+                 */
             }
         }
 
+
+        // ========================================================
+        // Managed Request Context
+        // ========================================================
+
+        /// <summary>
+        /// Stores the managed callbacks associated with one native
+        /// asynchronous request.
+        /// </summary>
         private sealed class RequestContext<T>
         {
-            internal readonly Action<T> Callback;
-            internal readonly Action<Exception> ErrorCallback;
+            internal readonly Action<T>
+                Callback;
+
+            internal readonly Action<Exception>
+                ErrorCallback;
+
 
             internal RequestContext(
                 Action<T> callback,
                 Action<Exception> errorCallback)
             {
-                Callback = callback;
-                ErrorCallback = errorCallback;
+                Callback =
+                    callback;
+
+                ErrorCallback =
+                    errorCallback;
             }
         }
+
 
         private static IntPtr CreateRequestContext<T>(
             Action<T> callback,
@@ -1493,22 +2291,31 @@ namespace PlayTradeX
                         callback,
                         errorCallback));
 
-            return GCHandle.ToIntPtr(handle);
+
+            return GCHandle.ToIntPtr(
+                handle);
         }
 
-        private static RequestContext<T> GetRequestContext<T>(
-            IntPtr userData)
+
+        private static RequestContext<T>
+            GetRequestContext<T>(
+                IntPtr userData)
         {
             if (userData == IntPtr.Zero)
             {
                 return null;
             }
 
-            GCHandle handle =
-                GCHandle.FromIntPtr(userData);
 
-            return handle.Target as RequestContext<T>;
+            GCHandle handle =
+                GCHandle.FromIntPtr(
+                    userData);
+
+
+            return handle.Target
+                as RequestContext<T>;
         }
+
 
         private static void FreeRequestContext(
             IntPtr userData)
@@ -1518,8 +2325,11 @@ namespace PlayTradeX
                 return;
             }
 
+
             GCHandle handle =
-                GCHandle.FromIntPtr(userData);
+                GCHandle.FromIntPtr(
+                    userData);
+
 
             if (handle.IsAllocated)
             {

@@ -450,7 +450,7 @@ public class PlayTradeXAbiConverterEditor : PlayTradeXEditorWindow
 
         string outputPath =
             Path.Combine(
-                GeneratedDirectory,
+                $"{GeneratedDirectory}/Contracts",
                 fileName + ".cs");
 
         using (StreamWriter writer =

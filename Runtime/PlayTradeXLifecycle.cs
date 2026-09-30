@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
+
 
 namespace PlayTradeX
 {
@@ -13,6 +15,15 @@ namespace PlayTradeX
     /// lifecycle instances, and shuts down the SDK when the application
     /// or Play Mode exits.
     ///
+    /// PlayTradeX supports multiple blockchain networks. Network
+    /// configuration is read from PlayTradeX Project Settings and all
+    /// configured networks are registered during SDK initialization.
+    ///
+    /// Wallet selection is intentionally not handled by this component.
+    /// The SDK-managed identity wallet and application-managed external
+    /// wallets are selected per transaction through the PlayTradeX
+    /// transaction APIs.
+    ///
     /// Add this component to a GameObject in the application's
     /// startup scene.
     /// </remarks>
@@ -20,7 +31,7 @@ namespace PlayTradeX
     public sealed class PlayTradeXLifecycle : MonoBehaviour
     {
         // ========================================================
-        // Inspector
+        // Initialization
         // ========================================================
 
         [Header("Initialization")]
@@ -30,24 +41,18 @@ namespace PlayTradeX
         [SerializeField]
         private bool autoInitialize = true;
 
+        // ========================================================
+        // Events
+        // ========================================================
 
-        [Tooltip("Blockchain RPC endpoint used by PlayTradeX.")]
-        [SerializeField]
-        private string rpc;
-
-
-        [Tooltip("Blockchain chain ID.")]
-        [SerializeField]
-        private long chainId;
-
-
-        [Header("Storage")]
-
-        [Tooltip(
-            "Leave empty to use Application.persistentDataPath.")]
-        [SerializeField]
-        private string storagePath = "";
-
+        /// <summary>
+        /// Raised after the PlayTradeX SDK has initialized
+        /// successfully.
+        /// </summary>
+        /// <remarks>
+        /// The supplied address is the SDK-managed identity wallet
+        /// address.
+        /// </remarks>
         public static event Action<string> Ready;
 
 
@@ -78,6 +83,7 @@ namespace PlayTradeX
         private static PlayTradeXLifecycle _instance;
 
         private bool _initializationStarted;
+
         private bool _shutdownRequested;
 
 
@@ -96,6 +102,7 @@ namespace PlayTradeX
         private static bool InitializePlatform()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
+
             try
             {
                 using (AndroidJavaClass unityPlayer =
@@ -114,6 +121,7 @@ namespace PlayTradeX
                             return false;
                         }
 
+
                         using (AndroidJavaObject context =
                             activity.Call<AndroidJavaObject>(
                                 "getApplicationContext"))
@@ -126,6 +134,7 @@ namespace PlayTradeX
                                 return false;
                             }
 
+
                             using (AndroidJavaClass playTradeXAndroid =
                                 new AndroidJavaClass(
                                     "com.playtradex.PlayTradeXAndroid"))
@@ -135,11 +144,13 @@ namespace PlayTradeX
                                         "initialize",
                                         context);
 
+
                                 if (!initialized)
                                 {
                                     Debug.LogError(
                                         "[PlayTradeX Unity] Android platform initialization failed.");
                                 }
+
 
                                 return initialized;
                             }
@@ -155,8 +166,11 @@ namespace PlayTradeX
 
                 return false;
             }
+
 #else
+
             return true;
+
 #endif
         }
 
@@ -172,22 +186,32 @@ namespace PlayTradeX
                 _instance != this)
             {
                 Destroy(gameObject);
+
                 return;
             }
 
-            _instance = this;
+
+            _instance =
+                this;
+
 
             // The SDK lifecycle must survive scene transitions.
-            DontDestroyOnLoad(gameObject);
+            DontDestroyOnLoad(
+                gameObject);
 
-            // Register native logging before platform and SDK
-            // initialization so initialization errors are captured.
+
+            /*
+             * Register native logging before platform and SDK
+             * initialization so initialization errors are captured.
+             */
             PlayTradeXSdk.SetupLogging();
+
 
             if (!InitializePlatform())
             {
                 return;
             }
+
 
             if (autoInitialize)
             {
@@ -200,6 +224,11 @@ namespace PlayTradeX
         // Automatic Initialization
         // ========================================================
 
+        /// <summary>
+        /// Loads the PlayTradeX Project Settings, converts the configured
+        /// Unity network settings into runtime NetworkConfig instances,
+        /// validates them, and initializes the native SDK.
+        /// </summary>
         private async void InitializeAutomatically()
         {
             if (_initializationStarted)
@@ -207,39 +236,111 @@ namespace PlayTradeX
                 return;
             }
 
+
             if (PlayTradeXSdk.IsInitialized())
             {
                 return;
             }
 
-            _initializationStarted = true;
+
+            _initializationStarted =
+                true;
+
 
             try
             {
+                // ------------------------------------------------
+                // Resolve Project Settings
+                // ------------------------------------------------
+
+                PlayTradeXSettings settings =
+                    PlayTradeXSettings.Instance;
+
+
+                if (settings == null)
+                {
+                    Debug.LogError(
+                        "[PlayTradeX Unity] PlayTradeX Project Settings " +
+                        "could not be loaded.");
+
+                    return;
+                }
+
+
+                // ------------------------------------------------
+                // Create Runtime Network Configuration
+                // ------------------------------------------------
+
+                NetworkConfig[] networks =
+                    settings.CreateNetworkConfigs();
+
+
+                /*
+                 * Project Settings owns the network configuration.
+                 *
+                 * NetworkConfigSettings converts only the information
+                 * required by the native SDK into NetworkConfig.
+                 *
+                 * Unity-only metadata such as Symbol and
+                 * BlockExplorerUrl remains on the Unity side.
+                 */
+                if (!ValidateNetworks(
+                        networks))
+                {
+                    return;
+                }
+
+
+                // ------------------------------------------------
+                // Resolve Storage
+                // ------------------------------------------------
+
                 string resolvedStoragePath =
-                    string.IsNullOrWhiteSpace(storagePath)
+                    string.IsNullOrWhiteSpace(
+                        settings.StoragePath)
                         ? Application.persistentDataPath
-                        : storagePath;
+                        : settings.StoragePath;
+
+
+                if (string.IsNullOrWhiteSpace(
+                        resolvedStoragePath))
+                {
+                    Debug.LogError(
+                        "[PlayTradeX Unity] Unable to resolve the SDK storage path.");
+
+                    return;
+                }
+
+
+                // ------------------------------------------------
+                // Initialize Native SDK
+                // ------------------------------------------------
 
                 InitializeResult result =
                     await PlayTradeXSdk.InitializeAsync(
                         resolvedStoragePath,
-                        rpc,
-                        chainId);
+                        networks);
 
-                // The lifecycle object may have been destroyed while
-                // native initialization was running.
+
+                /*
+                 * The lifecycle object may have been destroyed while
+                 * native initialization was running.
+                 */
                 if (this == null)
                 {
                     return;
                 }
 
-                // Shutdown may have been requested while native
-                // initialization was running.
+
+                /*
+                 * Shutdown may have been requested while native
+                 * initialization was running.
+                 */
                 if (_shutdownRequested)
                 {
                     return;
                 }
+
 
                 if (!result.Initialized)
                 {
@@ -250,12 +351,15 @@ namespace PlayTradeX
                     return;
                 }
 
+
                 Debug.Log(
-                    "[PlayTradeX Unity] SDK initialized successfully " +
-                    "with wallet address: " +
+                    "[PlayTradeX Unity] SDK initialized successfully.\n" +
+                    $"Networks: {networks.Length}\n" +
+                    $"Identity Wallet: {result.WalletAddress}");
+
+
+                Ready?.Invoke(
                     result.WalletAddress);
-                
-                Ready?.Invoke(result.WalletAddress);
             }
             catch (Exception exception)
             {
@@ -271,9 +375,143 @@ namespace PlayTradeX
             {
                 if (this != null)
                 {
-                    _initializationStarted = false;
+                    _initializationStarted =
+                        false;
                 }
             }
+        }
+
+
+        // ========================================================
+        // Network Validation
+        // ========================================================
+
+        /// <summary>
+        /// Performs basic validation of the runtime network
+        /// configuration before passing it to the native SDK.
+        /// </summary>
+        /// <param name="networks">
+        /// Runtime network configurations created from PlayTradeX
+        /// Project Settings.
+        /// </param>
+        /// <returns>
+        /// True when all network configurations contain the minimum
+        /// information required for initialization; otherwise false.
+        /// </returns>
+        /// <remarks>
+        /// Native PlayTradeX remains responsible for authoritative
+        /// network registration and validation. This validation exists
+        /// only to report obvious Unity configuration errors early.
+        /// </remarks>
+        private static bool ValidateNetworks(
+            NetworkConfig[] networks)
+        {
+            if (networks == null ||
+                networks.Length == 0)
+            {
+                Debug.LogError(
+                    "[PlayTradeX Unity] No blockchain networks are configured. " +
+                    "Add at least one network in Project Settings > PlayTradeX.");
+
+                return false;
+            }
+
+
+            HashSet<string> networkIds =
+                new HashSet<string>(
+                    StringComparer.Ordinal);
+
+
+            for (int i = 0;
+                 i < networks.Length;
+                 ++i)
+            {
+                NetworkConfig network =
+                    networks[i];
+
+
+                if (network == null)
+                {
+                    Debug.LogError(
+                        $"[PlayTradeX Unity] Network configuration at index {i} is null.");
+
+                    return false;
+                }
+
+
+                if (string.IsNullOrWhiteSpace(
+                        network.Id))
+                {
+                    Debug.LogError(
+                        $"[PlayTradeX Unity] Network at index {i} has no network ID.");
+
+                    return false;
+                }
+
+
+                /*
+                 * Network IDs identify registered networks throughout
+                 * the SDK and therefore must be unique.
+                 */
+                if (!networkIds.Add(
+                        network.Id))
+                {
+                    Debug.LogError(
+                        $"[PlayTradeX Unity] Duplicate network ID '{network.Id}'.");
+
+                    return false;
+                }
+
+
+                if (network.ChainId <= 0)
+                {
+                    Debug.LogError(
+                        $"[PlayTradeX Unity] Network '{network.Id}' has an invalid chain ID.");
+
+                    return false;
+                }
+
+
+                if (network.RpcEndpoints == null ||
+                    network.RpcEndpoints.Length == 0)
+                {
+                    Debug.LogError(
+                        $"[PlayTradeX Unity] Network '{network.Id}' has no RPC endpoints.");
+
+                    return false;
+                }
+
+
+                bool hasRpc =
+                    false;
+
+
+                for (int rpcIndex = 0;
+                     rpcIndex < network.RpcEndpoints.Length;
+                     ++rpcIndex)
+                {
+                    if (!string.IsNullOrWhiteSpace(
+                            network.RpcEndpoints[rpcIndex]))
+                    {
+                        hasRpc =
+                            true;
+
+                        break;
+                    }
+                }
+
+
+                if (!hasRpc)
+                {
+                    Debug.LogError(
+                        $"[PlayTradeX Unity] Network '{network.Id}' contains no valid RPC endpoint.");
+
+                    return false;
+                }
+            }
+
+
+            return true;
         }
 
 
@@ -289,16 +527,21 @@ namespace PlayTradeX
 
         private void OnDestroy()
         {
-            // Destroying a duplicate lifecycle component must not
-            // shut down the SDK owned by the active instance.
+            /*
+             * Destroying a duplicate lifecycle component must not
+             * shut down the SDK owned by the active instance.
+             */
             if (_instance != this)
             {
                 return;
             }
 
+
             ShutdownSdk();
 
-            _instance = null;
+
+            _instance =
+                null;
         }
 
 
@@ -306,16 +549,24 @@ namespace PlayTradeX
         // SDK Shutdown
         // ========================================================
 
+        /// <summary>
+        /// Requests native SDK shutdown once for the active lifecycle.
+        /// </summary>
         private void ShutdownSdk()
         {
-            // Unity may invoke both OnApplicationQuit() and
-            // OnDestroy(). Native shutdown must only be requested once.
+            /*
+             * Unity may invoke both OnApplicationQuit() and
+             * OnDestroy(). Native shutdown must only be requested once.
+             */
             if (_shutdownRequested)
             {
                 return;
             }
 
-            _shutdownRequested = true;
+
+            _shutdownRequested =
+                true;
+
 
             try
             {
@@ -329,6 +580,10 @@ namespace PlayTradeX
                  *
                  * Native Shutdown() is safe when the SDK is already
                  * uninitialized.
+                 *
+                 * Shutdown does not cancel blockchain transactions that
+                 * have already been submitted. Those transactions remain
+                 * subject to normal blockchain processing.
                  */
                 PlayTradeXSdk.Shutdown();
             }

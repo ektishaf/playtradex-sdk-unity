@@ -7,13 +7,37 @@ PlayTradeX supports native EVM currency operations and
 transaction-producing smart contract operations through its Unity C#
 API.
 
-This guide focuses on exact blockchain values, native balances, native
-currency transfers, response handling, and application-controlled
-transaction approval.
+`0.2.0-alpha` adds network-aware execution and support for both the
+PlayTradeX identity wallet and configured external wallets.
 
-> **Documentation target:** PlayTradeX `0.1.0-alpha` · Unity `6000.3`\
-> PlayTradeX must be initialized before using transaction APIs. See
-> [Getting Started](getting-started.md).
+> **Documentation target:** PlayTradeX `0.2.0-alpha` · Unity `6000.3`\
+> PlayTradeX must be initialized before transaction APIs are used.
+
+------------------------------------------------------------------------
+
+## Execution Context
+
+A transaction is no longer tied to one globally configured chain.
+
+Conceptually:
+
+``` text
+Transaction
+   ├── Network ID
+   │      └── Network configuration
+   │           ├── Chain ID
+   │           └── RPC URL(s)
+   │
+   └── Signing wallet
+          ├── PlayTradeX Identity Wallet
+          └── Configured External Wallet
+```
+
+Use the generated `GeneratedNetworks` and `GeneratedWallets` identifiers
+where appropriate.
+
+The included sample is the compile-ready reference for the exact
+`0.2.0-alpha` Unity overloads.
 
 ------------------------------------------------------------------------
 
@@ -22,13 +46,11 @@ transaction approval.
 Blockchain currency values should not be represented with `float` or
 `double` when exact precision matters.
 
-PlayTradeX provides string-based conversion utilities so values can be
-converted without introducing floating-point precision loss.
-
 ### Human-Readable Native Currency to Wei
 
 ``` csharp
-string amountWei = PlayTradeXUnits.ToWei("0.01");
+string amountWei =
+    PlayTradeXUnits.ToWei("0.01");
 ```
 
 Result:
@@ -40,7 +62,9 @@ Result:
 ### Wei to Human-Readable Native Currency
 
 ``` csharp
-string amount = PlayTradeXUnits.FromWei("10000000000000000");
+string amount =
+    PlayTradeXUnits.FromWei(
+        "10000000000000000");
 ```
 
 Result:
@@ -51,10 +75,13 @@ Result:
 
 ### Token Base Units
 
-For ERC-20 values, specify the token's decimal precision:
+For an 18-decimal token:
 
 ``` csharp
-string amount = PlayTradeXUnits.ToBaseUnit("1.5", 18);
+string amount =
+    PlayTradeXUnits.ToBaseUnit(
+        "1.5",
+        18);
 ```
 
 Result:
@@ -66,71 +93,99 @@ Result:
 For a 6-decimal token:
 
 ``` csharp
-string amount = PlayTradeXUnits.ToBaseUnit("12.5", 6);
+string amount =
+    PlayTradeXUnits.ToBaseUnit(
+        "12.5",
+        6);
 ```
 
-Convert a base-unit value back with:
+Convert back:
 
 ``` csharp
-string readable = PlayTradeXUnits.FromBaseUnit("12500000", 6);
+string readable =
+    PlayTradeXUnits.FromBaseUnit(
+        "12500000",
+        6);
 ```
 
 ------------------------------------------------------------------------
 
 ## Native Balance
 
-Retrieve the active wallet's native blockchain balance:
+Native balance queries are network-aware in `0.2.0-alpha`.
+
+Select the configured network whose native currency balance should be
+queried and, where the API path requires a wallet selection, select the
+intended identity/external wallet.
+
+Returned balances use their base-unit representation.
+
+For an 18-decimal native currency:
 
 ``` csharp
-NativeBalanceResponse response = await PlayTradeXSdk.GetNativeBalanceAsync();
-
 if (response.Success)
 {
-    string readable = PlayTradeXUnits.FromWei(response.Balance);
+    string readable =
+        PlayTradeXUnits.FromWei(
+            response.Balance);
+
     Debug.Log("Balance: " + readable);
 }
 else
 {
-    Debug.LogError(response.ErrorMessage);
+    Debug.LogError(
+        response.ErrorMessage);
 }
 ```
 
-The SDK returns blockchain balances in their base-unit representation.
-Convert them for display only when appropriate for the configured
-network.
+Use the included sample for the exact network/wallet-aware balance call
+exposed by the installed package.
 
 ------------------------------------------------------------------------
 
 ## Send Native Currency
 
-The low-level native transfer API accepts the amount in wei.
+Native transfers create blockchain transactions.
+
+Convert human-readable amounts before submission:
 
 ``` csharp
-string amountWei = PlayTradeXUnits.ToWei("0.01");
-
-TransactionResponse response =
-    await PlayTradeXSdk.SendEthAsync(destinationAddress, amountWei);
-
-if (response.Success)
-{
-    Debug.Log("Transaction submitted successfully.");
-}
-else
-{
-    Debug.LogError(response.ErrorMessage);
-}
+string amountWei =
+    PlayTradeXUnits.ToWei("0.01");
 ```
 
-Advanced integrations may provide the exact wei string directly:
+A transfer selects:
 
-``` csharp
-await PlayTradeXSdk.SendEthAsync(
-    destinationAddress,
-    "10000000000000000");
-```
+-   Network ID
+-   Destination address
+-   Exact base-unit amount
+-   PlayTradeX identity wallet or configured external wallet
 
-Keep transaction values as exact strings rather than converting through
+The native SDK constructs and executes the transaction using the
+selected execution context.
+
+Keep transaction amounts as exact strings rather than converting through
 floating-point types.
+
+------------------------------------------------------------------------
+
+## Identity Wallet vs External Wallet
+
+### Identity Wallet
+
+The PlayTradeX identity wallet is the wallet managed by the native SDK
+and its secure-storage lifecycle.
+
+### External Wallet
+
+A configured external wallet is selected through its developer-defined
+wallet ID.
+
+The Unity layer resolves that wallet configuration and passes the
+appropriate execution context to the native SDK.
+
+Application/gameplay code should prefer wallet IDs rather than directly
+handling private keys.
 
 ------------------------------------------------------------------------
 
@@ -138,27 +193,44 @@ floating-point types.
 
 PlayTradeX supports application-controlled transaction consent.
 
-Before a transaction continues, the application can present transaction
-information such as:
+Before a transaction continues, the application can present information
+such as:
 
--   Contract
+-   Contract or destination
 -   Function
 -   Parameters
 -   Value
 -   Estimated gas
+-   Preparation status
+-   Simulation information/errors where available
 
-This allows the game's own UI and UX to control the final approval
-experience while PlayTradeX handles transaction execution through the
-SDK.
+Approve a pending transaction:
 
-The included Unity sample demonstrates transaction consent and response
-handling.
+``` csharp
+PlayTradeXSdk.ApproveTransaction(
+    transactionId);
+```
+
+Deny a pending transaction:
+
+``` csharp
+PlayTradeXSdk.DenyTransaction(
+    transactionId);
+```
+
+A preparation or simulation failure is **not** the same as a user
+denial.
+
+If preparation fails, show the failure information and keep approval
+unavailable rather than reporting that the user denied the transaction.
+
+The included sample demonstrates the transaction-consent flow.
 
 ------------------------------------------------------------------------
 
 ## Handling Responses
 
-Always inspect the response before treating an operation as successful.
+Always inspect the response:
 
 ``` csharp
 if (response.Success)
@@ -167,34 +239,58 @@ if (response.Success)
 }
 else
 {
-    Debug.LogError(response.ErrorMessage);
+    Debug.LogError(
+        response.ErrorMessage);
 }
 ```
 
-Do not expose sensitive wallet data in logs while diagnosing transaction
-failures.
+Do not expose private keys, wallet passwords, or other sensitive wallet
+data while diagnosing failures.
+
+------------------------------------------------------------------------
+
+## RPC Considerations
+
+Networks can contain multiple RPC URLs.
+
+RPC endpoints are external infrastructure and can fail, rate-limit
+requests, or become unavailable independently of PlayTradeX.
+
+When diagnosing an operation, verify:
+
+-   Correct network ID
+-   Correct Chain ID
+-   RPC reachability
+-   Wallet balance
+-   Sufficient native currency for gas
+-   Destination/contract address
+-   Transaction preparation/simulation errors
 
 ------------------------------------------------------------------------
 
 ## Transaction Integration Guidelines
 
--   Wait for successful PlayTradeX initialization before sending
-    transactions.
--   Convert human-readable amounts with `PlayTradeXUnits`.
+-   Wait for successful SDK initialization.
+-   Use configured network IDs.
+-   Use configured wallet IDs instead of exposing private keys in
+    gameplay code.
+-   Convert human-readable values with `PlayTradeXUnits`.
 -   Avoid `float` and `double` for exact blockchain values.
--   Validate destination addresses and application inputs before
-    starting a transfer.
--   Present meaningful transaction information before user approval.
+-   Validate destination addresses and application input.
+-   Present meaningful transaction information before approval.
+-   Treat preparation/simulation failures separately from user denial.
 -   Handle unsuccessful responses explicitly.
 -   Use HTTPS RPC endpoints.
 -   Never log private keys or wallet passwords.
+-   Test with test networks and test assets before production use.
 
 ------------------------------------------------------------------------
 
 ## Smart Contract Transactions
 
-Contract writes also create blockchain transactions. Continue with
-[Smart Contracts](contracts.md) for read and write examples.
+Contract writes also create transactions.
+
+Continue with [Smart Contracts](contracts.md).
 
 ------------------------------------------------------------------------
 

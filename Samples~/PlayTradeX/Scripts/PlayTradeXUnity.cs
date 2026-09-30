@@ -1,16 +1,28 @@
 ﻿using System;
 using System.Threading.Tasks;
+
 using PlayTradeX;
 using PlayTradeX.UI;
+
 using UnityEngine;
+
 
 /// <summary>
 /// Unity-facing component for interacting with the PlayTradeX SDK.
 /// </summary>
 /// <remarks>
 /// This component provides convenient Unity APIs for blockchain
-/// operations, tracks SDK readiness, and manages transaction consent
-/// UI.
+/// operations, tracks SDK readiness, and manages transaction consent UI.
+///
+/// PlayTradeX supports multiple configured blockchain networks.
+/// Every blockchain operation therefore explicitly receives a network ID.
+///
+/// Transaction-signing operations can use either:
+///
+/// - The PlayTradeX identity wallet managed by the SDK.
+/// - An application-managed external wallet supplied by private key.
+///
+/// Read-only operations do not require a private key.
 ///
 /// The PlayTradeX SDK must be initialized before runtime blockchain
 /// operations are performed.
@@ -25,7 +37,10 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     // ============================================================
 
     private bool _isReady;
+
     private PreparedTransaction _pendingTransaction;
+
+    private string _walletAddress = string.Empty;
 
 
     // ============================================================
@@ -52,6 +67,20 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     public bool IsReady => _isReady;
 
 
+    /// <summary>
+    /// Gets the PlayTradeX identity wallet address reported when
+    /// the SDK becomes ready.
+    /// </summary>
+    public string WalletAddress => _walletAddress;
+
+
+    /// <summary>
+    /// Gets the transaction currently awaiting application consent.
+    /// </summary>
+    public PreparedTransaction PendingTransaction =>
+        _pendingTransaction;
+
+
     // ============================================================
     // Events
     // ============================================================
@@ -61,10 +90,12 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     /// </summary>
     public event Action<string> Ready;
 
+
     /// <summary>
     /// Raised when PlayTradeX is no longer initialized.
     /// </summary>
     public event Action NotReady;
+
 
     // ============================================================
     // Unity Lifecycle
@@ -76,7 +107,7 @@ public sealed class PlayTradeXUnity : MonoBehaviour
             OnInitializationChanged;
 
         PlayTradeXLifecycle.Ready +=
-       OnLifecycleReady;
+            OnLifecycleReady;
 
         PlayTradeXSdk.SetTransactionConsentCallback(
             OnTransactionConsentRequested);
@@ -85,29 +116,58 @@ public sealed class PlayTradeXUnity : MonoBehaviour
             PlayTradeXSdk.IsInitialized());
     }
 
+
     private void OnDisable()
     {
         PlayTradeXSdk.InitializationChanged -=
             OnInitializationChanged;
 
         PlayTradeXLifecycle.Ready -=
-        OnLifecycleReady;
+            OnLifecycleReady;
 
-        PlayTradeXSdk.SetTransactionConsentCallback(null);
+        /*
+         * Only unregister the consent callback if this component owns
+         * the application's consent UI.
+         */
+        PlayTradeXSdk.SetTransactionConsentCallback(
+            null);
 
         HideTransactionPopup();
     }
 
+
+    // ============================================================
+    // Lifecycle Ready
+    // ============================================================
+
     private void OnLifecycleReady(
         string walletAddress)
     {
-        _isReady = true;
+        _walletAddress =
+            walletAddress ?? string.Empty;
+
+        bool wasReady =
+            _isReady;
+
+        _isReady =
+            true;
 
         Debug.Log(
             "[PlayTradeX Unity] PlayTradeX SDK is ready.\n" +
-            $"Wallet Address: {walletAddress}");
+            $"Wallet Address: {_walletAddress}");
 
-        Ready?.Invoke(walletAddress);
+        /*
+         * LifecycleReady contains the identity wallet address, so it
+         * remains the authoritative ready notification exposed by this
+         * component.
+         */
+        Ready?.Invoke(
+            _walletAddress);
+
+        if (!wasReady)
+        {
+            return;
+        }
     }
 
 
@@ -118,14 +178,19 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     private void OnInitializationChanged(
         bool initialized)
     {
-        SetReadyState(initialized);
+        SetReadyState(
+            initialized);
     }
 
+
     private void SetReadyState(
-    bool initialized)
+        bool initialized)
     {
         if (initialized)
         {
+            _isReady =
+                true;
+
             return;
         }
 
@@ -134,13 +199,20 @@ public sealed class PlayTradeXUnity : MonoBehaviour
             return;
         }
 
-        _isReady = false;
+        _isReady =
+            false;
+
+        _walletAddress =
+            string.Empty;
+
+        HideTransactionPopup();
 
         Debug.Log(
             "[PlayTradeX Unity] PlayTradeX SDK is not ready.");
 
         NotReady?.Invoke();
     }
+
 
     /// <summary>
     /// Verifies that the PlayTradeX SDK is initialized before
@@ -160,34 +232,105 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Validates a configured network identifier before forwarding
+    /// an operation to the SDK.
+    /// </summary>
+    private static void ValidateNetworkId(
+        string networkId)
+    {
+        if (string.IsNullOrWhiteSpace(
+                networkId))
+        {
+            throw new ArgumentException(
+                "Network ID cannot be null or empty.",
+                nameof(networkId));
+        }
+    }
+
+
+    /// <summary>
+    /// Validates an application-managed external private key.
+    /// </summary>
+    private static void ValidatePrivateKey(
+        string privateKey)
+    {
+        if (string.IsNullOrWhiteSpace(
+                privateKey))
+        {
+            throw new ArgumentException(
+                "External wallet private key cannot be null or empty.",
+                nameof(privateKey));
+        }
+    }
+
+
     // ============================================================
     // Transaction Consent
     // ============================================================
 
     private void OnTransactionConsentRequested(
-        PreparedTransaction transaction)
+    PreparedTransaction transaction)
+{
+    if (transaction == null)
     {
-        if (transaction == null)
+        Debug.LogError(
+            "[PlayTradeX Unity] Received null transaction consent request.");
+
+        return;
+    }
+
+
+        // ============================================================
+        // Diagnostics
+        // ============================================================
+
+        if (!transaction.CanSubmit)
         {
             Debug.LogError(
-                "[PlayTradeX Unity] Received an invalid " +
-                "transaction consent request.");
-
-            return;
+                "[PlayTradeX Unity] Prepared transaction cannot be submitted.\n" +
+                $"Reason: {transaction.PreparationError}\n" +
+                $"Simulation: {transaction.SimulationError}");
         }
 
-        _pendingTransaction = transaction;
 
-        Debug.Log(
-            "[PlayTradeX Unity] Transaction approval requested.\n" +
-            $"ID: {transaction.Id}\n" +
-            $"Contract: {transaction.ContractAddress}\n" +
-            $"Function: {transaction.FunctionName}\n" +
-            $"Parameters: {transaction.Params}\n" +
-            $"Value: {transaction.Value}");
+        // ============================================================
+        // Show consent / preparation result
+        //
+        // Even when CanSubmit == false, show the transaction so the
+        // developer/user can see why submission is unavailable.
+        //
+        // The popup itself disables the Approve button when the
+        // transaction cannot be submitted.
+        // ============================================================
 
+        /*transactionPopup.Show(
+            transaction,
+
+            () =>
+            {
+                if (!transaction.CanSubmit)
+                {
+                    Debug.LogError(
+                        "[PlayTradeX Unity] Attempted to approve a transaction " +
+                        "that cannot be submitted.");
+
+                    return;
+                }
+
+
+                PlayTradeXSdk.ApproveTransaction(
+                    transaction.Id);
+            },
+
+            () =>
+            {
+                PlayTradeXSdk.DenyTransaction(
+                    transaction.Id);
+            });*/
         ShowTransactionPopup(transaction);
-    }
+}
+
 
     private void ShowTransactionPopup(
         PreparedTransaction transaction)
@@ -197,24 +340,49 @@ public sealed class PlayTradeXUnity : MonoBehaviour
             Debug.LogError(
                 "[PlayTradeX Unity] Transaction popup is not assigned.");
 
-            PlayTradeXSdk.DenyTransaction(transaction.Id);
+            PlayTradeXSdk.DenyTransaction(
+                transaction.Id);
 
-            _pendingTransaction = null;
+            _pendingTransaction =
+                null;
 
             return;
         }
-
+        
+        // ============================================================
+        // Show consent / preparation result
+        //
+        // Even when CanSubmit == false, show the transaction so the
+        // developer/user can see why submission is unavailable.
+        //
+        // The popup itself disables the Approve button when the
+        // transaction cannot be submitted.
+        // ============================================================
         transactionPopup.Show(
             transaction,
-            () => ApproveTransaction(transaction.Id),
+            () => {
+                if (!transaction.CanSubmit)
+                {
+                    Debug.LogError(
+                        "[PlayTradeX Unity] Attempted to approve a transaction " +
+                        "that cannot be submitted.");
+
+                    return;
+                }
+
+                ApproveTransaction(
+                    transaction.Id);
+            },
             () => DenyTransaction(transaction.Id));
     }
+
 
     private void ApproveTransaction(
         string transactionId)
     {
         bool approved =
-            PlayTradeXSdk.ApproveTransaction(transactionId);
+            PlayTradeXSdk.ApproveTransaction(
+                transactionId);
 
         if (approved)
         {
@@ -230,11 +398,13 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         HideTransactionPopup();
     }
 
+
     private void DenyTransaction(
         string transactionId)
     {
         bool denied =
-            PlayTradeXSdk.DenyTransaction(transactionId);
+            PlayTradeXSdk.DenyTransaction(
+                transactionId);
 
         if (denied)
         {
@@ -250,6 +420,7 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         HideTransactionPopup();
     }
 
+
     private void HideTransactionPopup()
     {
         if (transactionPopup != null)
@@ -257,42 +428,105 @@ public sealed class PlayTradeXUnity : MonoBehaviour
             transactionPopup.Hide();
         }
 
-        _pendingTransaction = null;
+        _pendingTransaction =
+            null;
     }
 
 
     // ============================================================
-    // Native Balance
+    // Standalone Wallet Generation
     // ============================================================
 
     /// <summary>
-    /// Gets the native blockchain balance of the PlayTradeX wallet.
+    /// Generates a new standalone EVM wallet.
     /// </summary>
-    /// <returns>
-    /// A task containing the native balance response.
-    /// </returns>
-    public async Task<NativeBalanceResponse> GetNativeBalance()
+    /// <remarks>
+    /// The generated wallet is application-managed and is not stored
+    /// as the PlayTradeX identity wallet.
+    ///
+    /// The returned private key is sensitive wallet material.
+    /// Applications are responsible for protecting it.
+    /// </remarks>
+    public async Task<GenerateWalletResponse> GenerateWallet(
+        bool sequential = false)
+    {
+        try
+        {
+            GenerateWalletResponse response =
+                await PlayTradeXSdk.GenerateWalletAsync(
+                    sequential);
+
+            if (response.Success)
+            {
+                Debug.Log(
+                    "[PlayTradeX Unity] Standalone wallet generated.\n" +
+                    $"Address: {response.Wallet.Address}");
+            }
+            else
+            {
+                Debug.LogError(
+                    "[PlayTradeX Unity] Generate Wallet failed.\n" +
+                    $"Error Code: {response.ErrorCode}\n" +
+                    $"Message: {response.ErrorMessage}");
+            }
+
+            return response;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(
+                exception);
+
+            throw;
+        }
+    }
+
+
+    // ============================================================
+    // Native Balance - Identity Wallet
+    // ============================================================
+
+    /// <summary>
+    /// Gets the native blockchain balance of the PlayTradeX identity
+    /// wallet on the selected network.
+    /// </summary>
+    /// <param name="networkId">
+    /// ID of a network configured during SDK initialization.
+    /// </param>
+    /// <param name="sequential">
+    /// When true, queues the request for sequential execution.
+    /// </param>
+    public async Task<NativeBalanceResponse> GetNativeBalance(
+        string networkId,
+        bool sequential = false)
     {
         if (!EnsureInitialized())
         {
             return null;
         }
 
+        ValidateNetworkId(
+            networkId);
+
         try
         {
             NativeBalanceResponse response =
-                await PlayTradeXSdk.GetNativeBalanceAsync();
+                await PlayTradeXSdk.GetNativeBalanceAsync(
+                    networkId,
+                    sequential);
 
             if (response.Success)
             {
                 Debug.Log(
-                    "[PlayTradeX Unity] Native Balance: " +
-                    response.Balance);
+                    "[PlayTradeX Unity] Native Balance.\n" +
+                    $"Network: {networkId}\n" +
+                    $"Address: {_walletAddress}\n" +
+                    $"Balance: {response.Balance}");
             }
             else
             {
                 LogError(
-                    "Get Native Balance",
+                    $"Get Native Balance [{networkId}]",
                     response);
             }
 
@@ -300,7 +534,78 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogException(exception);
+            Debug.LogException(
+                exception);
+
+            throw;
+        }
+    }
+
+
+    // ============================================================
+    // Native Balance - Arbitrary Address
+    // ============================================================
+
+    /// <summary>
+    /// Gets the native blockchain balance of an arbitrary EVM address.
+    /// </summary>
+    /// <remarks>
+    /// This is a read-only operation and therefore does not require
+    /// the private key of the supplied address.
+    /// </remarks>
+    public async Task<NativeBalanceResponse>
+        GetNativeBalanceForAddress(
+            string networkId,
+            string address,
+            bool sequential = false)
+    {
+        if (!EnsureInitialized())
+        {
+            return null;
+        }
+
+        ValidateNetworkId(
+            networkId);
+
+        if (string.IsNullOrWhiteSpace(
+                address))
+        {
+            throw new ArgumentException(
+                "Wallet address cannot be null or empty.",
+                nameof(address));
+        }
+
+        try
+        {
+            NativeBalanceResponse response =
+                await PlayTradeXSdk
+                    .GetNativeBalanceForAddressAsync(
+                        networkId,
+                        address,
+                        sequential);
+
+            if (response.Success)
+            {
+                Debug.Log(
+                    "[PlayTradeX Unity] Address Native Balance.\n" +
+                    $"Network: {networkId}\n" +
+                    $"Address: {address}\n" +
+                    $"Balance: {response.Balance}");
+            }
+            else
+            {
+                LogError(
+                    $"Get Address Native Balance [{networkId}]",
+                    response);
+            }
+
+            return response;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(
+                exception);
+
             throw;
         }
     }
@@ -311,14 +616,22 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// Calls a read-only smart contract function.
+    /// Calls a read-only smart contract function on the selected
+    /// blockchain network.
     /// </summary>
     /// <remarks>
     /// The ABI must contain a human-readable function signature.
     ///
     /// Example:
+    ///
     /// function totalSupply() view returns (uint256)
+    ///
+    /// Read operations do not require transaction signing and therefore
+    /// do not require either the identity wallet or an external wallet.
     /// </remarks>
+    /// <param name="networkId">
+    /// ID of a network configured during SDK initialization.
+    /// </param>
     /// <param name="contractAddress">
     /// Address of the smart contract.
     /// </param>
@@ -328,41 +641,52 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     /// <param name="parameters">
     /// JSON array containing the function parameters.
     /// </param>
-    /// <returns>
-    /// A task containing the contract read response.
-    /// </returns>
+    /// <param name="sequential">
+    /// When true, queues the request for sequential execution.
+    /// </param>
     public async Task<ContractReadResponse> Read(
+        string networkId,
         string contractAddress,
         string abi,
-        string parameters = "[]")
+        string parameters = "[]",
+        bool sequential = false)
     {
         if (!EnsureInitialized())
         {
             return null;
         }
 
+        ValidateNetworkId(
+            networkId);
+
         try
         {
             string functionName =
-                ExtractFunctionName(abi);
+                ExtractFunctionName(
+                    abi);
 
             ContractReadResponse response =
                 await PlayTradeXSdk.ReadAsync(
+                    networkId,
                     contractAddress,
                     abi,
                     functionName,
-                    parameters);
+                    parameters,
+                    sequential);
 
             if (response.Success)
             {
                 Debug.Log(
-                    "[PlayTradeX Unity] Read Result: " +
-                    response.Data);
+                    "[PlayTradeX Unity] Read succeeded.\n" +
+                    $"Network: {networkId}\n" +
+                    $"Contract: {contractAddress}\n" +
+                    $"Function: {functionName}\n" +
+                    $"Result: {response.Data}");
             }
             else
             {
                 LogError(
-                    "Read",
+                    $"Read [{networkId}]",
                     response);
             }
 
@@ -370,59 +694,61 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogException(exception);
+            Debug.LogException(
+                exception);
+
             throw;
         }
     }
 
 
     // ============================================================
-    // Send Native Currency
+    // Send Native Currency - Identity Wallet
     // ============================================================
 
     /// <summary>
-    /// Sends native blockchain currency to another address.
+    /// Sends native blockchain currency using the SDK-managed
+    /// PlayTradeX identity wallet.
     /// </summary>
     /// <remarks>
     /// This creates a blockchain transaction and may require
     /// transaction consent before submission.
     /// </remarks>
-    /// <param name="to">
-    /// Destination blockchain address.
-    /// </param>
-    /// <param name="amount">
-    /// Amount of native currency to send.
-    /// </param>
-    /// <returns>
-    /// A task containing the transaction response.
-    /// </returns>
     public async Task<TransactionResponse> SendEth(
+        string networkId,
         string to,
-        string amount)
+        string amount,
+        bool sequential = false)
     {
         if (!EnsureInitialized())
         {
             return null;
         }
+
+        ValidateNetworkId(
+            networkId);
 
         try
         {
             TransactionResponse response =
                 await PlayTradeXSdk.SendEthAsync(
+                    networkId,
                     to,
-                    amount);
+                    amount,
+                    sequential);
 
             if (response.Success)
             {
                 LogTransaction(
-                    "Send ETH",
+                    $"Send Native Currency [{networkId}]",
                     response);
             }
             else
             {
                 LogError(
-                    "Send ETH",
+                    $"Send Native Currency [{networkId}]",
                     response);
+
                 HideTransactionPopup();
             }
 
@@ -430,77 +756,66 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogException(exception);
+            Debug.LogException(
+                exception);
+
             throw;
         }
     }
 
 
     // ============================================================
-    // Write Contract
+    // Send Native Currency - External Wallet
     // ============================================================
 
     /// <summary>
-    /// Calls a state-changing smart contract function.
+    /// Sends native blockchain currency using an application-managed
+    /// external wallet.
     /// </summary>
     /// <remarks>
-    /// The ABI must contain a human-readable function signature.
+    /// The supplied private key is used only for this operation and is
+    /// not stored as the PlayTradeX identity wallet.
     ///
-    /// Example:
-    /// function transfer(address to, uint256 amount) returns (bool)
-    ///
-    /// This creates a blockchain transaction and may require
-    /// transaction consent before submission.
+    /// Never log or display the private key.
     /// </remarks>
-    /// <param name="contractAddress">
-    /// Address of the smart contract.
-    /// </param>
-    /// <param name="abi">
-    /// Human-readable function ABI.
-    /// </param>
-    /// <param name="parameters">
-    /// JSON array containing the function parameters.
-    /// </param>
-    /// <param name="value">
-    /// Native currency value attached to the transaction.
-    /// </param>
-    /// <returns>
-    /// A task containing the transaction response.
-    /// </returns>
-    public async Task<TransactionResponse> Write(
-        string contractAddress,
-        string abi,
-        string parameters = "[]",
-        string value = "0")
+    public async Task<TransactionResponse> SendEthWithWallet(
+        string networkId,
+        string privateKey,
+        string to,
+        string amount,
+        bool sequential = false)
     {
         if (!EnsureInitialized())
         {
             return null;
         }
 
+        ValidateNetworkId(
+            networkId);
+
+        ValidatePrivateKey(
+            privateKey);
+
         try
         {
-            string functionName =
-                ExtractFunctionName(abi);
-
             TransactionResponse response =
-                await PlayTradeXSdk.WriteAsync(
-                    contractAddress,
-                    abi,
-                    functionName,
-                    parameters,
-                    value);
+                await PlayTradeXSdk.SendEthWithWalletAsync(
+                    networkId,
+                    privateKey,
+                    to,
+                    amount,
+                    sequential);
 
             if (response.Success)
             {
                 LogTransaction(
-                    "Write",
+                    $"Send Native Currency - External Wallet [{networkId}]",
                     response);
             }
             else
             {
                 LogError(
-                    "Write",
+                    $"Send Native Currency - External Wallet [{networkId}]",
                     response);
 
                 HideTransactionPopup();
@@ -510,7 +825,86 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogException(exception);
+            Debug.LogException(
+                exception);
+
+            throw;
+        }
+    }
+
+
+    // ============================================================
+    // Write Contract - Identity Wallet
+    // ============================================================
+
+    /// <summary>
+    /// Calls a state-changing smart contract function using the
+    /// SDK-managed PlayTradeX identity wallet.
+    /// </summary>
+    /// <remarks>
+    /// The ABI must contain a human-readable function signature.
+    ///
+    /// Example:
+    ///
+    /// function transfer(address to, uint256 amount) returns (bool)
+    ///
+    /// This creates a blockchain transaction and may require
+    /// transaction consent before submission.
+    /// </remarks>
+    public async Task<TransactionResponse> Write(
+        string networkId,
+        string contractAddress,
+        string abi,
+        string parameters = "[]",
+        string value = "0",
+        bool sequential = false)
+    {
+        if (!EnsureInitialized())
+        {
+            return null;
+        }
+
+        ValidateNetworkId(
+            networkId);
+
+        try
+        {
+            string functionName =
+                ExtractFunctionName(
+                    abi);
+
+            TransactionResponse response =
+                await PlayTradeXSdk.WriteAsync(
+                    networkId,
+                    contractAddress,
+                    abi,
+                    functionName,
+                    parameters,
+                    value,
+                    sequential);
+
+            if (response.Success)
+            {
+                LogTransaction(
+                    $"Write [{networkId}]",
+                    response);
+            }
+            else
+            {
+                LogError(
+                    $"Write [{networkId}]",
+                    response);
+
+                HideTransactionPopup();
+            }
+
+            return response;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(
+                exception);
+
             throw;
         }
         finally
@@ -519,26 +913,158 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         }
     }
 
+
+    // ============================================================
+    // Write Contract - External Wallet
+    // ============================================================
+
+    /// <summary>
+    /// Calls a state-changing smart contract function using an
+    /// application-managed external wallet.
+    /// </summary>
+    /// <remarks>
+    /// The private key is supplied only for this execution.
+    /// PlayTradeX does not persist it as the identity wallet.
+    ///
+    /// This transaction may require application consent before
+    /// submission.
+    /// </remarks>
+    public async Task<TransactionResponse> WriteWithWallet(
+        string networkId,
+        string privateKey,
+        string contractAddress,
+        string abi,
+        string parameters = "[]",
+        string value = "0",
+        bool sequential = false)
+    {
+        if (!EnsureInitialized())
+        {
+            return null;
+        }
+
+        ValidateNetworkId(
+            networkId);
+
+        ValidatePrivateKey(
+            privateKey);
+
+        try
+        {
+            string functionName =
+                ExtractFunctionName(
+                    abi);
+
+            TransactionResponse response =
+                await PlayTradeXSdk.WriteWithWalletAsync(
+                    networkId,
+                    privateKey,
+                    contractAddress,
+                    abi,
+                    functionName,
+                    parameters,
+                    value,
+                    sequential);
+
+            if (response.Success)
+            {
+                LogTransaction(
+                    $"Write - External Wallet [{networkId}]",
+                    response);
+            }
+            else
+            {
+                LogError(
+                    $"Write - External Wallet [{networkId}]",
+                    response);
+
+                HideTransactionPopup();
+            }
+
+            return response;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(
+                exception);
+
+            throw;
+        }
+        finally
+        {
+            HideTransactionPopup();
+        }
+    }
+
+
+    // ============================================================
+    // Human-Readable ABI
+    // ============================================================
+
+    /// <summary>
+    /// Converts a contract ABI into the human-readable ABI format
+    /// supported by PlayTradeX.
+    /// </summary>
+    public async Task<HumanReadableAbiResponse> HumanReadableAbi(
+        string abi,
+        bool minimal = false,
+        bool sequential = false)
+    {
+        if (!EnsureInitialized())
+        {
+            return null;
+        }
+
+        try
+        {
+            HumanReadableAbiResponse response =
+                await PlayTradeXSdk.HumanReadableAbiAsync(
+                    abi,
+                    minimal,
+                    sequential);
+
+            if (response.Success)
+            {
+                Debug.Log(
+                    "[PlayTradeX Unity] Human-readable ABI generated.\n" +
+                    response.Abi);
+            }
+            else
+            {
+                LogError(
+                    "Human Readable ABI",
+                    response);
+            }
+
+            return response;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(
+                exception);
+
+            throw;
+        }
+    }
+
+
     // ============================================================
     // Wallet Export
     // ============================================================
 
     /// <summary>
-    /// Exports the current PlayTradeX wallet to an encrypted
+    /// Exports the current PlayTradeX identity wallet to an encrypted
     /// wallet file.
     /// </summary>
-    /// <param name="password">
-    /// Password used to encrypt the exported wallet.
-    /// </param>
-    /// <param name="outputPath">
-    /// Destination file path or supported platform URI.
-    /// </param>
-    /// <returns>
-    /// A task containing the wallet export response.
-    /// </returns>
+    /// <remarks>
+    /// This exports only the SDK-managed identity wallet.
+    /// Application-managed standalone/external wallets remain the
+    /// application's responsibility.
+    /// </remarks>
     public async Task<WalletExportResponse> ExportWallet(
         string password,
-        string outputPath)
+        string outputPath,
+        bool sequential = false)
     {
         if (!EnsureInitialized())
         {
@@ -550,13 +1076,15 @@ public sealed class PlayTradeXUnity : MonoBehaviour
             WalletExportResponse response =
                 await PlayTradeXSdk.ExportWalletAsync(
                     password,
-                    outputPath);
+                    outputPath,
+                    sequential);
 
             if (response.Success)
             {
                 Debug.Log(
                     "[PlayTradeX Unity] Wallet exported successfully.\n" +
-                    $"Path: {outputPath}");
+                    $"Wallet Address: {response.WalletAddress}\n" +
+                    $"Path: {response.FilePath}");
             }
             else
             {
@@ -569,7 +1097,9 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogException(exception);
+            Debug.LogException(
+                exception);
+
             throw;
         }
     }
@@ -580,27 +1110,19 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// Imports an encrypted PlayTradeX wallet file.
+    /// Imports an encrypted PlayTradeX identity-wallet backup.
     /// </summary>
     /// <remarks>
     /// For the Alpha SDK, PlayTradeX must already be initialized
     /// before importing a wallet.
     ///
-    /// After a successful import, the application must be restarted
+    /// After a successful import, the application should restart
     /// before continuing normal SDK operations.
     /// </remarks>
-    /// <param name="password">
-    /// Password used to decrypt the wallet.
-    /// </param>
-    /// <param name="inputPath">
-    /// Wallet file path or supported platform URI.
-    /// </param>
-    /// <returns>
-    /// The wallet import response.
-    /// </returns>
     public async Task<WalletImportResponse> ImportWallet(
         string password,
-        string inputPath)
+        string inputPath,
+        bool sequential = false)
     {
         if (!EnsureInitialized())
         {
@@ -610,9 +1132,10 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         try
         {
             WalletImportResponse response =
-    await PlayTradeXSdk.ImportWalletAsync(
-        password,
-        inputPath);
+                await PlayTradeXSdk.ImportWalletAsync(
+                    password,
+                    inputPath,
+                    sequential);
 
             if (response.Success)
             {
@@ -632,7 +1155,9 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogException(exception);
+            Debug.LogException(
+                exception);
+
             throw;
         }
     }
@@ -658,7 +1183,8 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     public static string ExtractFunctionName(
         string functionSignature)
     {
-        if (string.IsNullOrWhiteSpace(functionSignature))
+        if (string.IsNullOrWhiteSpace(
+                functionSignature))
         {
             throw new ArgumentException(
                 "Function signature cannot be null or empty.",
@@ -669,14 +1195,19 @@ public sealed class PlayTradeXUnity : MonoBehaviour
             functionSignature.Trim();
 
         signature =
-            signature.Trim('[', ']', '"').Trim();
+            signature
+                .Trim('[', ']', '"')
+                .Trim();
 
         if (signature.StartsWith(
-            "function ",
-            StringComparison.Ordinal))
+                "function ",
+                StringComparison.Ordinal))
         {
             signature =
-                signature.Substring("function ".Length).TrimStart();
+                signature
+                    .Substring(
+                        "function ".Length)
+                    .TrimStart();
         }
 
         int parenthesisIndex =
@@ -690,11 +1221,14 @@ public sealed class PlayTradeXUnity : MonoBehaviour
         }
 
         string functionName =
-            signature.Substring(
-                0,
-                parenthesisIndex).Trim();
+            signature
+                .Substring(
+                    0,
+                    parenthesisIndex)
+                .Trim();
 
-        if (string.IsNullOrEmpty(functionName))
+        if (string.IsNullOrEmpty(
+                functionName))
         {
             throw new ArgumentException(
                 "Function name could not be extracted.",
@@ -719,13 +1253,24 @@ public sealed class PlayTradeXUnity : MonoBehaviour
             $"Receipt: {response.Receipt}");
     }
 
+
     private static void LogError(
         string operation,
         BaseResponse response)
     {
+        if (response == null)
+        {
+            Debug.LogError(
+                $"[PlayTradeX Unity] {operation} failed.\n" +
+                "No response was returned.");
+
+            return;
+        }
+
         Debug.LogError(
             $"[PlayTradeX Unity] {operation} failed.\n" +
             $"Error Code: {response.ErrorCode}\n" +
-            $"Message: {response.ErrorMessage}");
+            $"Message: {response.ErrorMessage}\n" +
+            $"Body: {response.Body}");
     }
 }
