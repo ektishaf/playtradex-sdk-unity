@@ -6,7 +6,7 @@ PlayTradeX is a native blockchain SDK with a Unity C# interface for
 integrating EVM-compatible blockchain functionality into games and
 interactive applications.
 
-This documentation targets **PlayTradeX SDK `0.3.0-alpha`** and **Unity
+This documentation targets **PlayTradeX SDK `0.4.0-alpha`** and **Unity
 `6000.3`**.
 
 > **Current Alpha platforms:** Windows x64 and Android arm64-v8a\
@@ -69,26 +69,26 @@ The Unity package also includes a sample demonstrating:
 
 ------------------------------------------------------------------------
 
-## What's New in `0.3.0-alpha`
+## What's New in `0.4.0-alpha`
 
-`0.3.0-alpha` builds on the multi-network and multi-RPC configuration introduced in the previous release by adding RPC reliability and automatic failover.
+`0.4.0-alpha` builds on the RPC validation and automatic failover introduced in `0.3.0-alpha` by adding health-aware round-robin load balancing across eligible endpoints.
 
 Major additions include:
 
--   Automatic validation of configured RPC endpoints using `eth_chainId`
--   Rejection of RPC endpoints connected to the wrong EVM chain
--   Automatic failover across configured RPC endpoints after eligible failures
--   Cached RPC validation results
--   Temporary-failure cooldown for unavailable endpoints
--   Synchronization of concurrent RPC validation
--   Centralized RPC resolution and execution
--   Reliable RPC handling for native balances, contract reads, and transaction preparation
+-   Round-robin distribution across healthy eligible RPC endpoints
+-   Runtime RPC health cooldown and automatic endpoint re-entry
+-   Reservation-aware starting positions for concurrent requests
+-   Generation-safe load-balancer cursor updates
+-   Failover-aware cursor correction after the endpoint that actually succeeds
+-   Independent load-balancer state for distinct ordered RPC pools on the same chain
+-   Continued `eth_chainId` validation and wrong-chain rejection
+-   Continued cached validation and concurrent validation synchronization
+-   Continued automatic failover after eligible failures
 -   Preservation of the prepared RPC through transaction approval/submission
--   Android Release symbol stripping, reducing the native ARM64 library from approximately 44 MB to 10 MB
 
 The existing multi-network, multi-wallet, generated identifier, Project Settings, About/Updater, and Unity sample workflows remain available.
 
-> `0.3.0-alpha` provides RPC validation and failover. It does not perform RPC load balancing across healthy endpoints.
+> `0.4.0-alpha` combines RPC load balancing, validation, health tracking, and automatic failover.
 
 ------------------------------------------------------------------------
 
@@ -149,7 +149,7 @@ Initialization](getting-started.md#sdk-initialization).
 
 ## Execution Model
 
-`0.3.0-alpha` separates network selection from transaction signing.
+`0.4.0-alpha` separates network selection from transaction signing.
 
 ``` text
 Operation
@@ -173,7 +173,7 @@ source and may enter the transaction-consent flow.
 
 ## Platform Support
 
-  Platform   Architecture   `0.3.0-alpha`
+  Platform   Architecture   `0.4.0-alpha`
   ---------- -------------- ---------------
   Windows    x64            Supported
   Android    arm64-v8a      Supported
@@ -213,7 +213,7 @@ foundation with:
 -   Continued Unity support and sample improvements
 -   macOS support
 -   iOS support
--   Continued network/RPC reliability and future load-balancing work
+-   Continued network/RPC reliability, load-balancing, and health-management improvements
 -   Continued wallet lifecycle improvements
 -   Expanded SDK tooling and documentation
 -   Production-readiness work
@@ -225,7 +225,7 @@ foundation with:
 ## Version
 
 ``` text
-PlayTradeX SDK: 0.3.0-alpha
+PlayTradeX SDK: 0.4.0-alpha
 Unity:           6000.3
 Windows:         x64
 Android:         arm64-v8a

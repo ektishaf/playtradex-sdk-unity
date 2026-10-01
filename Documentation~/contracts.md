@@ -6,11 +6,11 @@
 PlayTradeX supports read and write operations against EVM-compatible
 smart contracts through its Unity C# API.
 
-`0.3.0-alpha` makes contract execution network-aware and allows
+`0.4.0-alpha` makes contract execution network-aware and allows
 transaction-producing writes to use the PlayTradeX identity wallet or a
 configured external wallet.
 
-> **Documentation target:** PlayTradeX `0.3.0-alpha` · Unity `6000.3`\
+> **Documentation target:** PlayTradeX `0.4.0-alpha` · Unity `6000.3`\
 > PlayTradeX must be initialized before contract APIs are used.
 
 ------------------------------------------------------------------------
@@ -54,7 +54,7 @@ else
 ```
 
 Use the included sample for the exact network-aware `ReadAsync`
-signature exposed by `0.3.0-alpha`.
+signature exposed by `0.4.0-alpha`.
 
 ------------------------------------------------------------------------
 
@@ -109,7 +109,7 @@ constants rather than raw strings.
 The selected network determines the EVM chain and RPC configuration used
 for the call.
 
-In `0.3.0-alpha`, configured RPC endpoints are validated against that network's Chain ID. Contract reads use the centralized RPC execution path and can fail over to another configured endpoint after eligible failures. Wrong-chain endpoints are rejected.
+In `0.4.0-alpha`, configured RPC endpoints are validated against that network's Chain ID. Contract reads use the centralized RPC execution path, are distributed across healthy eligible endpoints through round-robin selection, and can fail over after eligible failures. Wrong-chain and temporarily unhealthy endpoints are excluded from normal selection until eligible again.
 
 ------------------------------------------------------------------------
 
@@ -217,13 +217,13 @@ See [Transactions](transactions.md) for transaction-consent guidance.
 
 ------------------------------------------------------------------------
 
-## `0.3.0-alpha` Change from the Previous Release
+## `0.4.0-alpha` Change from the Previous Release
 
 Multi-network and multi-RPC configuration remain part of the current Unity SDK architecture.
 
-`0.3.0-alpha` adds chain-aware RPC validation and automatic failover. Contract reads can use alternative configured endpoints after eligible failures, while transaction-producing writes resolve a validated RPC during preparation and retain that prepared RPC through approval/submission.
+`0.4.0-alpha` adds health-aware round-robin load balancing on top of the chain-aware validation and automatic failover introduced in `0.3.0-alpha`. Contract reads can be distributed across healthy eligible endpoints and fail over after eligible failures. Transaction-producing writes can use load-balanced RPC resolution during preparation, then retain the prepared RPC through approval/submission.
 
-RPC load balancing across healthy endpoints is not part of this release.
+Runtime endpoint cooldown/re-entry, concurrent reservation protection, generation-safe cursor management, and per-pool load-balancer isolation are handled by the native RPC infrastructure.
 
 The broader `1.0.0` roadmap continues toward Unreal Engine support,
 additional native platforms, expanded reliability, tooling, and

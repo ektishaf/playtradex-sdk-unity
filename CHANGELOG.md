@@ -27,6 +27,125 @@ The following capabilities are currently planned for the December `1.0.0` releas
 
 ---
 
+## [0.4.0-alpha] - 2026-10-01
+
+### Health-Aware RPC Load Balancing Alpha
+
+This release builds on the RPC validation and automatic failover introduced in `0.3.0-alpha` by adding health-aware round-robin load balancing across eligible RPC endpoints, concurrent reservation protection, failover-aware cursor correction, runtime endpoint health cooldown/re-entry, and isolated load-balancer state for distinct RPC pools.
+
+The release continues to target **Unity 6000.3** with native support for **Windows x64** and **Android arm64-v8a**.
+
+### Added
+
+#### RPC Load Balancing
+
+- Health-aware round-robin distribution across eligible RPC endpoints configured for a network.
+- Requests can begin from different healthy endpoints instead of always preferring the first configured RPC.
+- Endpoint eligibility incorporates runtime health and cached chain-validation state.
+- Load balancing works together with the existing automatic failover path rather than replacing it.
+
+#### Concurrent Reservation Protection
+
+- In-flight RPC requests reserve eligible starting positions where possible to reduce unnecessary concentration on the same endpoint.
+- When all eligible endpoints are already reserved, requests remain non-blocking and can share an eligible endpoint rather than waiting.
+- Reservation state is released automatically when the request scope completes.
+
+#### Generation-Safe Cursor Management
+
+- Load-balancer state tracks a generation for RPC starting-position reservations.
+- Older requests that complete after newer reservations cannot overwrite a newer load-balancer cursor.
+- Failover can correct the cursor to continue after the endpoint that actually completed the operation when the reservation generation is still authoritative.
+
+#### Runtime RPC Health
+
+- Retryable operation failures can place an RPC endpoint into a temporary runtime-health cooldown.
+- Endpoints in runtime cooldown are skipped while eligible alternatives are available.
+- Cooled-down endpoints automatically become eligible for retry after the cooldown expires.
+- Successful use restores the endpoint to healthy runtime state.
+
+#### RPC Pool Isolation
+
+- Load-balancer state is isolated by expected chain ID and ordered configured RPC endpoint set.
+- Different RPC pools on the same chain maintain independent cursors, reservations, and generations.
+- Same-sized RPC pools on the same chain no longer share load-balancer state.
+
+### Changed
+
+#### RPC Endpoint Selection
+
+- Multiple healthy endpoints are now intentionally distributed through round-robin selection.
+- RPC selection skips endpoints that are currently in runtime cooldown or known to be invalid for the expected chain.
+- Existing chain-validation caching and temporary validation-failure handling remain part of endpoint eligibility.
+
+#### Automatic Failover
+
+- Successful failover can advance the load-balancer cursor relative to the endpoint that actually completed the operation.
+- Failover cursor correction is generation-safe so late concurrent completions do not corrupt newer reservations.
+- `ResolveRpc()` and centralized RPC POST execution use the same load-balancer reservation model for chain-aware operations.
+
+#### Transaction RPC Consistency
+
+- Transaction preparation benefits from load-balanced RPC resolution when selecting its submission endpoint.
+- After preparation, approval/submission continues using the exact RPC stored with the prepared transaction.
+- The SDK does not rebalance an already prepared transaction onto an unrelated RPC after application consent.
+
+### Fixed
+
+#### Concurrent Load Balancing
+
+- Prevented late concurrent request completion from incorrectly rewinding or advancing the current RPC cursor.
+- Prevented independent RPC endpoint configurations on the same chain from interfering with one another's load-balancer state.
+- Improved distribution behavior when one configured endpoint is unavailable and healthy alternatives remain.
+
+#### Endpoint Recovery
+
+- Improved runtime recovery so temporarily unhealthy endpoints can automatically re-enter selection after cooldown.
+- Preserved automatic failover when a recovered endpoint fails again during a later operation.
+
+### Behavioral Notes
+
+#### Load Balancing and Failover
+
+`0.4.0-alpha` combines **load balancing** and **automatic failover**. Healthy eligible endpoints are intentionally distributed using round-robin starting positions. If the selected endpoint experiences an eligible failure, execution can continue through the configured pool.
+
+Wrong-chain endpoints remain rejected, and temporarily unhealthy endpoints remain excluded until eligible for retry.
+
+#### Concurrency
+
+Concurrent requests use reservation-aware starting positions. Generation-safe cursor updates prevent an older request that finishes late from overriding a newer reservation.
+
+#### RPC Pool Identity
+
+Load-balancer cursor, reservation, and generation state is scoped to the expected chain and the ordered RPC endpoint configuration. Two different endpoint pools on the same chain therefore progress independently.
+
+#### Transaction Submission
+
+Load balancing applies while resolving an RPC for transaction preparation. Once a transaction is prepared, the selected RPC is retained through approval and submission to preserve transaction consistency.
+
+### API Compatibility
+
+This release does **not require changes to the existing public Unity API** used by `0.3.0-alpha`. RPC load balancing is implemented within the native networking infrastructure.
+
+Existing Unity integrations can adopt the updated package/native binaries without migrating their network/wallet-facing blockchain calls.
+
+### Supported Platforms
+
+| Platform | Architecture | Status |
+|---|---|---|
+| Windows | x64 | Alpha Supported |
+| Android | arm64-v8a | Alpha Supported |
+| macOS | — | Planned |
+| Linux | — | Planned |
+| iOS | — | Planned |
+
+### Unity Compatibility
+
+```text
+Unity 6000.3
+```
+
+---
+
 ## [0.3.0-alpha] - 2026-10-01
 
 ### Multi-RPC Reliability and Automatic Failover Alpha
