@@ -6,7 +6,7 @@ PlayTradeX is a native blockchain SDK with a Unity C# interface for
 integrating EVM-compatible blockchain functionality into games and
 interactive applications.
 
-This documentation targets **PlayTradeX SDK `0.2.0-alpha`** and **Unity
+This documentation targets **PlayTradeX SDK `0.3.0-alpha`** and **Unity
 `6000.3`**.
 
 > **Current Alpha platforms:** Windows x64 and Android arm64-v8a\
@@ -69,28 +69,26 @@ The Unity package also includes a sample demonstrating:
 
 ------------------------------------------------------------------------
 
-## What's New in `0.2.0-alpha`
+## What's New in `0.3.0-alpha`
 
-`0.2.0-alpha` moves PlayTradeX from the original single-network
-configuration model to centralized project configuration.
+`0.3.0-alpha` builds on the multi-network and multi-RPC configuration introduced in the previous release by adding RPC reliability and automatic failover.
 
 Major additions include:
 
--   Multiple configured EVM networks
--   Multiple RPC URLs per network
--   Human-readable network names
--   Multiple application-managed wallets
--   PlayTradeX identity-wallet and external-wallet execution
--   Built-in EVM testnet presets
--   `GeneratedNetworks` constants
--   `GeneratedWallets` constants
--   Centralized `Project Settings > PlayTradeX`
--   PlayTradeX About and Updater tooling
--   Updated Unity sample
+-   Automatic validation of configured RPC endpoints using `eth_chainId`
+-   Rejection of RPC endpoints connected to the wrong EVM chain
+-   Automatic failover across configured RPC endpoints after eligible failures
+-   Cached RPC validation results
+-   Temporary-failure cooldown for unavailable endpoints
+-   Synchronization of concurrent RPC validation
+-   Centralized RPC resolution and execution
+-   Reliable RPC handling for native balances, contract reads, and transaction preparation
+-   Preservation of the prepared RPC through transaction approval/submission
+-   Android Release symbol stripping, reducing the native ARM64 library from approximately 44 MB to 10 MB
 
-The previous model of configuring a single RPC URL and Chain ID directly
-on the lifecycle component is no longer the recommended `0.2.0-alpha`
-configuration model.
+The existing multi-network, multi-wallet, generated identifier, Project Settings, About/Updater, and Unity sample workflows remain available.
+
+> `0.3.0-alpha` provides RPC validation and failover. It does not perform RPC load balancing across healthy endpoints.
 
 ------------------------------------------------------------------------
 
@@ -151,7 +149,7 @@ Initialization](getting-started.md#sdk-initialization).
 
 ## Execution Model
 
-`0.2.0-alpha` separates network selection from transaction signing.
+`0.3.0-alpha` separates network selection from transaction signing.
 
 ``` text
 Operation
@@ -175,7 +173,7 @@ source and may enter the transaction-consent flow.
 
 ## Platform Support
 
-  Platform   Architecture   `0.2.0-alpha`
+  Platform   Architecture   `0.3.0-alpha`
   ---------- -------------- ---------------
   Windows    x64            Supported
   Android    arm64-v8a      Supported
@@ -215,7 +213,7 @@ foundation with:
 -   Continued Unity support and sample improvements
 -   macOS support
 -   iOS support
--   Expanded network/RPC reliability
+-   Continued network/RPC reliability and future load-balancing work
 -   Continued wallet lifecycle improvements
 -   Expanded SDK tooling and documentation
 -   Production-readiness work
@@ -227,7 +225,7 @@ foundation with:
 ## Version
 
 ``` text
-PlayTradeX SDK: 0.2.0-alpha
+PlayTradeX SDK: 0.3.0-alpha
 Unity:           6000.3
 Windows:         x64
 Android:         arm64-v8a

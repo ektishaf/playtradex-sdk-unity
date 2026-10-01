@@ -27,6 +27,199 @@ The following capabilities are currently planned for the December `1.0.0` releas
 
 ---
 
+## [0.3.0-alpha] - 2026-10-01
+
+### Multi-RPC Reliability and Automatic Failover Alpha
+
+This release strengthens the **PlayTradeX SDK for Unity** networking layer with automatic RPC endpoint validation, chain-aware endpoint selection, RPC failover, validation caching, concurrent validation synchronization, and improved transaction RPC consistency.
+
+Building on the multi-network and multi-RPC configuration introduced in `0.2.0-alpha`, this release makes configured RPC endpoints an active reliability mechanism during blockchain operations.
+
+The release continues to target **Unity 6000.3** with native support for **Windows x64** and **Android arm64-v8a**.
+
+### Added
+
+#### RPC Endpoint Validation
+
+- Automatic validation of configured RPC endpoints before use.
+- EVM chain ID validation through `eth_chainId`.
+- RPC endpoints are checked against the expected chain ID of their configured network.
+- Wrong-chain RPC endpoints are automatically rejected.
+- Invalid endpoints are skipped when another configured endpoint is available.
+- Malformed chain-validation responses are handled without accepting the endpoint.
+- RPC validation is centralized through the native RPC execution infrastructure.
+
+#### Automatic RPC Failover
+
+- Automatic failover across multiple RPC endpoints configured for the same network.
+- Retryable transport and HTTP failures can move execution to another configured endpoint.
+- Temporarily unavailable endpoints can be skipped while alternative endpoints are evaluated.
+- Non-retryable failures stop execution instead of unnecessarily retrying other endpoints.
+- RPC failover is available without requiring changes to the existing Unity-facing blockchain API.
+
+#### RPC Validation Cache
+
+- Chain-validation results are cached for previously validated RPC endpoints.
+- Valid endpoints can be reused without repeating `eth_chainId` validation for every operation.
+- Wrong-chain endpoints can be cached as invalid to avoid repeated validation attempts.
+- Temporary RPC failures are tracked separately from permanently invalid endpoints.
+- Temporary-failure cooldown prevents repeatedly attempting an unavailable endpoint during the cooldown period.
+- RPC validation cache is cleared during SDK shutdown.
+
+#### Concurrent RPC Validation
+
+- Synchronization for RPC endpoint validation across concurrent SDK operations.
+- Concurrent requests validating the same endpoint can share the validation result.
+- Duplicate simultaneous `eth_chainId` validation requests are avoided where possible.
+- RPC validation synchronization operates independently from transaction metadata collection concurrency.
+
+#### Centralized RPC Execution
+
+- Added centralized native RPC resolution and execution through `RpcExecutor`.
+- RPC resolution considers configured endpoints, expected chain ID, cached validation state, and temporary endpoint availability.
+- Added centralized RPC POST execution with endpoint failover handling.
+- Blockchain operations can share RPC reliability behavior without duplicating endpoint-selection logic.
+
+---
+
+### Changed
+
+#### Native Balance Queries
+
+- Native currency balance operations now use centralized RPC resolution.
+- Balance queries can automatically resolve a valid endpoint from the configured network RPC list.
+- Balance queries benefit from chain validation, cached endpoint validation, and RPC failover.
+
+#### Smart Contract Reads
+
+- Smart contract read operations now use centralized RPC resolution.
+- Contract reads can use another configured endpoint after an eligible endpoint failure.
+- Contract reads benefit from chain-aware endpoint validation.
+
+#### Transaction Metadata Collection
+
+- Transaction metadata RPC requests now use the centralized RPC execution infrastructure.
+- Transaction nonce retrieval uses validated RPC execution.
+- Gas estimation uses validated RPC execution.
+- Maximum priority fee retrieval uses validated RPC execution.
+- Latest base fee retrieval uses validated RPC execution.
+- Transaction metadata requests continue to execute concurrently while independently benefiting from RPC validation and failover.
+
+#### Transaction Preparation
+
+- Transaction preparation now resolves a validated RPC endpoint from the selected network.
+- The resolved RPC endpoint is stored with the prepared transaction.
+- Transactions are marked unavailable for submission when no valid RPC endpoint can be resolved.
+- Transaction preparation preserves an appropriate preparation error when RPC resolution fails.
+- The transaction consent flow remains available even when transaction submission cannot proceed.
+
+#### Transaction Approval and Submission
+
+- Transaction approval preserves the RPC endpoint selected during transaction preparation.
+- The SDK does not unnecessarily re-resolve the RPC endpoint after application consent.
+- Prepared transactions retain RPC consistency between preparation and submission.
+
+#### Network Reliability
+
+- Multiple RPC endpoints introduced in `0.2.0-alpha` are now actively used as a reliability mechanism.
+- RPC endpoint selection is no longer limited to simply using the first configured endpoint.
+- Network execution distinguishes valid, wrong-chain, temporarily unavailable, retryable-failure, and non-retryable-failure conditions.
+- Different configured networks can execute blockchain operations concurrently using their own endpoint sets.
+
+#### Android Release Builds
+
+- Android Release binaries are stripped of unnecessary debug and symbol information before distribution.
+- `libPlayTradeXSDK.so` Release size reduced from approximately **44 MB to 10 MB**.
+- Production SDK logging is disabled for the Android Release configuration.
+- Debug/development builds can retain debugging information where required.
+
+---
+
+### Fixed
+
+#### RPC Reliability
+
+- Prevented wrong-chain RPC endpoints from being accepted for blockchain execution.
+- Improved behavior when the first configured RPC endpoint is unavailable.
+- Improved handling of temporary RPC transport failures.
+- Prevented unnecessary repeated validation of already validated endpoints.
+- Improved behavior when multiple SDK operations attempt RPC validation concurrently.
+- Improved recovery when an endpoint temporarily becomes unavailable.
+
+#### Transaction Execution
+
+- Improved RPC consistency between transaction preparation, consent, approval, and submission.
+- Prevented transaction preparation from silently relying on an invalid or wrong-chain RPC endpoint.
+- Improved failure reporting when no valid RPC endpoint is available for transaction submission.
+
+#### SDK Lifecycle
+
+- RPC validation state is cleared during SDK shutdown.
+- Network validation state no longer persists beyond the intended SDK lifecycle.
+
+#### Android Packaging
+
+- Removed unnecessary debug and symbol data from distributed Android Release binaries.
+- Reduced Android native SDK package size while preserving Release functionality.
+
+---
+
+### Behavioral Notes
+
+#### RPC Failover
+
+RPC endpoints are evaluated according to their configured network and expected chain ID. If an endpoint experiences an eligible temporary or retryable failure, the SDK can continue with another configured endpoint.
+
+An endpoint reporting a different chain ID is rejected rather than used as a fallback.
+
+#### Validation Caching
+
+Successful chain validation is cached to reduce unnecessary RPC traffic. Invalid and temporarily unavailable endpoints are also tracked so repeated blockchain operations do not continuously perform the same unsuccessful validation work.
+
+The validation cache is scoped to the SDK lifecycle and is cleared during shutdown.
+
+#### Transaction RPC Consistency
+
+Transaction preparation resolves the RPC endpoint associated with the prepared transaction. After application consent, transaction approval continues using that prepared RPC instead of performing an unrelated endpoint selection.
+
+#### Failover vs. Load Balancing
+
+`0.3.0-alpha` introduces **RPC reliability and automatic failover**, not RPC load balancing.
+
+Multiple configured endpoints provide alternatives when endpoints are invalid or unavailable, but requests are not intentionally distributed across healthy RPC endpoints for load balancing.
+
+RPC load balancing is planned for a future SDK release.
+
+---
+
+### API Compatibility
+
+This release does **not require changes to the existing public Unity API** introduced in `0.2.0-alpha`.
+
+The multi-RPC validation and failover behavior is implemented primarily within the native networking infrastructure.
+
+Existing Unity integrations using the `0.2.0-alpha` public API can adopt the updated native binaries without migrating their Unity-facing blockchain calls.
+
+---
+
+### Supported Platforms
+
+| Platform | Architecture | Status |
+|---|---|---|
+| Windows | x64 | Alpha Supported |
+| Android | arm64-v8a | Alpha Supported |
+| macOS | — | Planned |
+| Linux | — | Planned |
+| iOS | — | Planned |
+
+### Unity Compatibility
+
+```text
+Unity 6000.3
+```
+
+---
+
 ## [0.2.0-alpha] - 2026-09-30
 
 ### Multi-Network, Multi-Wallet and Developer Tooling Alpha

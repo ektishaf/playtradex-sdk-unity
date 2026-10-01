@@ -7,10 +7,10 @@ PlayTradeX supports native EVM currency operations and
 transaction-producing smart contract operations through its Unity C#
 API.
 
-`0.2.0-alpha` adds network-aware execution and support for both the
+`0.3.0-alpha` adds network-aware execution and support for both the
 PlayTradeX identity wallet and configured external wallets.
 
-> **Documentation target:** PlayTradeX `0.2.0-alpha` · Unity `6000.3`\
+> **Documentation target:** PlayTradeX `0.3.0-alpha` · Unity `6000.3`\
 > PlayTradeX must be initialized before transaction APIs are used.
 
 ------------------------------------------------------------------------
@@ -37,7 +37,7 @@ Use the generated `GeneratedNetworks` and `GeneratedWallets` identifiers
 where appropriate.
 
 The included sample is the compile-ready reference for the exact
-`0.2.0-alpha` Unity overloads.
+`0.3.0-alpha` Unity overloads.
 
 ------------------------------------------------------------------------
 
@@ -112,7 +112,7 @@ string readable =
 
 ## Native Balance
 
-Native balance queries are network-aware in `0.2.0-alpha`.
+Native balance queries are network-aware in `0.3.0-alpha`.
 
 Select the configured network whose native currency balance should be
 queried and, where the API path requires a wallet selection, select the
@@ -249,12 +249,19 @@ data while diagnosing failures.
 
 ------------------------------------------------------------------------
 
-## RPC Considerations
+## RPC Reliability and Failover
 
 Networks can contain multiple RPC URLs.
 
-RPC endpoints are external infrastructure and can fail, rate-limit
-requests, or become unavailable independently of PlayTradeX.
+In `0.3.0-alpha`, PlayTradeX validates RPC endpoints against the configured network Chain ID before accepting them for execution. An endpoint that reports the wrong chain is rejected.
+
+Eligible transport or HTTP failures can trigger automatic failover to another configured endpoint. Successful validation results are cached, while temporarily unavailable endpoints can be placed into a cooldown state to avoid immediate repeated failures. Concurrent operations also synchronize validation of the same endpoint to reduce duplicate chain-validation requests.
+
+Transaction preparation resolves and retains its selected RPC so that approval/submission continues with the prepared endpoint rather than unnecessarily resolving a different one after user consent.
+
+> RPC failover is a reliability feature. `0.3.0-alpha` does not load-balance requests across healthy RPC endpoints.
+
+RPC endpoints remain external infrastructure and can fail, rate-limit requests, or become unavailable independently of PlayTradeX.
 
 When diagnosing an operation, verify:
 

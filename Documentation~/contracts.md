@@ -6,11 +6,11 @@
 PlayTradeX supports read and write operations against EVM-compatible
 smart contracts through its Unity C# API.
 
-`0.2.0-alpha` makes contract execution network-aware and allows
+`0.3.0-alpha` makes contract execution network-aware and allows
 transaction-producing writes to use the PlayTradeX identity wallet or a
 configured external wallet.
 
-> **Documentation target:** PlayTradeX `0.2.0-alpha` · Unity `6000.3`\
+> **Documentation target:** PlayTradeX `0.3.0-alpha` · Unity `6000.3`\
 > PlayTradeX must be initialized before contract APIs are used.
 
 ------------------------------------------------------------------------
@@ -54,7 +54,7 @@ else
 ```
 
 Use the included sample for the exact network-aware `ReadAsync`
-signature exposed by `0.2.0-alpha`.
+signature exposed by `0.3.0-alpha`.
 
 ------------------------------------------------------------------------
 
@@ -108,6 +108,8 @@ constants rather than raw strings.
 
 The selected network determines the EVM chain and RPC configuration used
 for the call.
+
+In `0.3.0-alpha`, configured RPC endpoints are validated against that network's Chain ID. Contract reads use the centralized RPC execution path and can fail over to another configured endpoint after eligible failures. Wrong-chain endpoints are rejected.
 
 ------------------------------------------------------------------------
 
@@ -215,12 +217,13 @@ See [Transactions](transactions.md) for transaction-consent guidance.
 
 ------------------------------------------------------------------------
 
-## `0.2.0-alpha` Change from the Previous Release
+## `0.3.0-alpha` Change from the Previous Release
 
-Multi-network support is **no longer only a future roadmap item**.
+Multi-network and multi-RPC configuration remain part of the current Unity SDK architecture.
 
-In `0.2.0-alpha`, network configuration and network-aware contract
-execution are part of the current Unity SDK architecture.
+`0.3.0-alpha` adds chain-aware RPC validation and automatic failover. Contract reads can use alternative configured endpoints after eligible failures, while transaction-producing writes resolve a validated RPC during preparation and retain that prepared RPC through approval/submission.
+
+RPC load balancing across healthy endpoints is not part of this release.
 
 The broader `1.0.0` roadmap continues toward Unreal Engine support,
 additional native platforms, expanded reliability, tooling, and

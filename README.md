@@ -6,7 +6,7 @@ PlayTradeX is a cross-platform blockchain SDK for game developers who want to in
 
 The Unity package provides a developer-friendly C# layer while the core blockchain functionality remains inside the native PlayTradeX SDK.
 
-> **Current Release:** `0.2.0-alpha`  
+> **Current Release:** `0.3.0-alpha`  
 > **Unity:** `6000.3`  
 > **Status:** Alpha / Pre-release  
 > **Supported Platforms:** Windows x64 and Android arm64-v8a  
@@ -21,10 +21,16 @@ Blockchain integration in a game should not require every Unity team to build wa
 
 PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code can work with **configured networks**, **wallet IDs**, and familiar asynchronous operations.
 
-`0.2.0-alpha` expands the original SDK foundation with:
+`0.3.0-alpha` expands the SDK foundation with:
 
 - Multi-network EVM configuration
 - Multiple RPC endpoints per network
+- Automatic RPC failover across configured endpoints
+- RPC `eth_chainId` validation and wrong-network endpoint rejection
+- RPC validation caching and temporary-failure cooldown
+- Concurrent RPC validation synchronization
+- Centralized RPC resolution for blockchain operations
+- Transaction RPC consistency from preparation through submission
 - Multiple application-managed wallets
 - Network-aware blockchain execution
 - Identity-wallet and external-wallet execution
@@ -32,6 +38,7 @@ PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code 
 - Generated network and wallet constants
 - Centralized Unity Project Settings
 - SDK updater and package information tooling
+- Optimized Android Release binaries
 - Expanded Windows and Android integration
 - Updated Unity sample
 
@@ -44,6 +51,10 @@ PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code 
 - Native EVM blockchain integration
 - Multiple configured EVM networks
 - Multiple RPC endpoints per network
+- Automatic RPC endpoint validation and failover
+- Chain ID validation with wrong-network endpoint rejection
+- RPC validation caching and temporary-failure cooldown
+- Concurrent RPC validation synchronization
 - Native currency balance queries
 - Native currency transfers
 - Read-only smart contract calls
@@ -93,7 +104,7 @@ PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code 
 
 # Platform Support
 
-| Platform | Architecture | `0.2.0-alpha` |
+| Platform | Architecture | `0.3.0-alpha` |
 |---|---|---|
 | Windows | x64 | **Alpha Supported** |
 | Android | arm64-v8a | **Alpha Supported** |
@@ -101,7 +112,7 @@ PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code 
 | Linux | — | Planned |
 | iOS | — | Planned |
 
-Windows and Android are the supported targets for `0.2.0-alpha`.
+Windows and Android are the supported targets for `0.3.0-alpha`.
 
 ---
 
@@ -120,12 +131,12 @@ Choose:
 Enter:
 
 ```text
-https://github.com/ektishaf/playtradex-sdk-unity.git#v0.2.0-alpha
+https://github.com/ektishaf/playtradex-sdk-unity.git#v0.3.0-alpha
 ```
 
 Using the tagged release is strongly recommended.
 
-The `#v0.2.0-alpha` revision pins the project to this exact SDK release instead of following changes on the repository branch.
+The `#v0.3.0-alpha` revision pins the project to this exact SDK release instead of following changes on the repository branch.
 
 ## `manifest.json`
 
@@ -134,7 +145,7 @@ You can also add PlayTradeX directly to the project's `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.playtradex.sdk": "https://github.com/ektishaf/playtradex-sdk-unity.git#v0.2.0-alpha"
+    "com.playtradex.sdk": "https://github.com/ektishaf/playtradex-sdk-unity.git#v0.3.0-alpha"
   }
 }
 ```
@@ -148,13 +159,14 @@ You can also add PlayTradeX directly to the project's `Packages/manifest.json`:
 - Android API Level 26 or newer
 - Internet access for blockchain operations
 - At least one configured EVM network
-- At least one working RPC endpoint for every network you intend to use
+- At least one valid HTTPS RPC endpoint for every network you intend to use
+- Multiple RPC endpoints per network are recommended when failover is desired
 
 ---
 
 # Quick Start
 
-The most important change in `0.2.0-alpha` is that **network and wallet configuration is centralized in Unity Project Settings**.
+`0.3.0-alpha` retains centralized network and wallet configuration in Unity Project Settings and adds **automatic RPC validation and failover** across the RPC endpoints configured for each network.
 
 You no longer need to treat a single RPC URL and Chain ID on a scene component as the application's blockchain configuration.
 
@@ -281,15 +293,21 @@ Block Explorer URL: https://testnet.bscscan.com
 
 A network can contain multiple RPC URLs.
 
-This lets a network configuration carry more than one endpoint instead of requiring a single RPC URL to be hardcoded throughout the project.
+In `0.3.0-alpha`, these endpoints are actively used by the native RPC reliability layer rather than serving only as configuration alternatives.
+
+Before an endpoint is accepted, PlayTradeX validates its EVM chain ID against the configured network. An endpoint that reports the wrong chain is rejected automatically.
+
+When an eligible transport or HTTP failure occurs, PlayTradeX can continue with another configured endpoint. Successful validation results are cached, temporary failures use a cooldown, and concurrent operations synchronize endpoint validation to avoid unnecessary duplicate validation work.
 
 Use reliable HTTPS endpoints appropriate for the network being configured.
+
+> **Failover, not load balancing:** `0.3.0-alpha` uses multiple endpoints for validation and reliability. It does not intentionally distribute requests across healthy endpoints for load balancing.
 
 ---
 
 # 4. Built-in Testnet Presets
 
-`0.2.0-alpha` introduces package-owned EVM testnet presets.
+`0.3.0-alpha` introduces package-owned EVM testnet presets.
 
 In the **Networks** section, PlayTradeX provides:
 
@@ -335,7 +353,7 @@ Preset data includes:
 - Block explorer URL
 - Testnet classification
 
-> Public RPC endpoints are external infrastructure and can change independently of PlayTradeX. If an endpoint becomes unavailable, configure another valid endpoint for that network.
+> Public RPC endpoints are external infrastructure and can change independently of PlayTradeX. Configure multiple valid endpoints when practical so `0.3.0-alpha` can use automatic failover when an eligible endpoint becomes unavailable.
 
 ---
 
@@ -371,7 +389,7 @@ If you rename a network ID, regenerate the class.
 
 Wallets are managed from the **Wallets** section of PlayTradeX Project Settings.
 
-`0.2.0-alpha` supports application-managed wallet configuration in addition to the native PlayTradeX identity wallet.
+`0.3.0-alpha` supports application-managed wallet configuration in addition to the native PlayTradeX identity wallet.
 
 A configured external wallet can contain:
 
@@ -428,7 +446,7 @@ Add the `PlayTradeXLifecycle` component to a GameObject in the application's sta
 
 The lifecycle component initializes the required platform integration and native PlayTradeX SDK using the PlayTradeX project configuration.
 
-For `0.2.0-alpha`, **RPC URLs and Chain IDs belong to network configuration**, rather than representing a single scene-level blockchain configuration.
+For `0.3.0-alpha`, **RPC URLs and Chain IDs belong to network configuration**. The native SDK validates configured RPC endpoints against the network Chain ID and can fail over between eligible endpoints.
 
 Do not start blockchain operations until PlayTradeX initialization has completed successfully.
 
@@ -462,7 +480,7 @@ Use the `Ready` event when code should react to initialization and `PlayTradeXLi
 
 # Network and Wallet Execution Model
 
-`0.2.0-alpha` separates **which network to use** from **which wallet signs a transaction**.
+`0.3.0-alpha` separates **which network to use** from **which wallet signs a transaction**.
 
 ```text
 Blockchain Operation
@@ -481,6 +499,8 @@ Blockchain Operation
 ```
 
 Applications are therefore no longer designed around one globally hardcoded chain.
+
+Within the selected network, `0.3.0-alpha` resolves a validated RPC endpoint and can fail over when an eligible endpoint encounters a retryable failure. Different configured networks retain their own endpoint sets and can execute operations concurrently.
 
 ## Read Operations
 
@@ -514,7 +534,7 @@ string readable =
 Debug.Log(readable);
 ```
 
-Use the network-aware API demonstrated by the included `0.2.0-alpha` sample when selecting a configured network and wallet.
+Use the network-aware API demonstrated by the included `0.3.0-alpha` sample when selecting a configured network and wallet. Native balance operations benefit from the SDK's validated RPC resolution and failover infrastructure.
 
 ---
 
@@ -593,7 +613,7 @@ string amountWei =
     PlayTradeXUnits.ToWei("0.01");
 ```
 
-In `0.2.0-alpha`, transaction execution is network-aware and can use either:
+In `0.3.0-alpha`, transaction execution is network-aware and can use either:
 
 - The PlayTradeX identity wallet, or
 - A configured external wallet
@@ -601,6 +621,8 @@ In `0.2.0-alpha`, transaction execution is network-aware and can use either:
 Use the corresponding network/wallet overload demonstrated in the included sample.
 
 The transaction may enter the PlayTradeX transaction-consent flow before submission.
+
+During transaction preparation, PlayTradeX resolves and stores a validated RPC endpoint. After application consent, approval continues with that prepared RPC rather than unnecessarily selecting a different endpoint.
 
 ---
 
@@ -615,6 +637,8 @@ A read:
 - Accepts function parameters according to the SDK API
 - Does not create a blockchain transaction
 - Does not require transaction approval
+
+Read operations use the centralized RPC execution infrastructure and can benefit from chain validation and automatic endpoint failover.
 
 The ABI Converter can help generate and maintain human-readable contract information.
 
@@ -634,6 +658,32 @@ A write can select:
 - Transaction value where applicable
 
 Transaction-producing calls can use the PlayTradeX consent flow before submission.
+
+Transaction preparation resolves a validated endpoint for the selected network and retains that RPC through the approval/submission flow.
+
+---
+
+# RPC Reliability in `0.3.0-alpha`
+
+`0.3.0-alpha` turns multiple configured RPC endpoints into an active reliability mechanism.
+
+For supported RPC operations, the native SDK can:
+
+- Validate an endpoint with `eth_chainId`
+- Compare the reported chain ID with the configured network
+- Reject wrong-chain endpoints
+- Cache successful and invalid validation results
+- Track temporary failures separately from permanently invalid endpoints
+- Apply a cooldown to temporarily unavailable endpoints
+- Synchronize concurrent validation of the same endpoint
+- Retry another configured endpoint after eligible transport or HTTP failures
+- Stop appropriately on non-retryable failures
+
+The validation cache is scoped to the SDK lifecycle and is cleared during SDK shutdown.
+
+Transaction metadata operations such as nonce retrieval, gas estimation, priority-fee retrieval, and latest base-fee retrieval continue to run concurrently while using the centralized RPC reliability infrastructure.
+
+> `0.3.0-alpha` provides RPC **validation and failover**. It does not provide RPC load balancing.
 
 ---
 
@@ -757,6 +807,8 @@ The Android integration provides:
 - CA certificate setup
 - Native PlayTradeX library loading
 - arm64-v8a native support
+- Stripped Android Release native binaries
+- Production native logging disabled for Release builds
 
 Current Android target:
 
@@ -767,18 +819,20 @@ API Level 26+
 
 Broad storage permissions are not required for the Storage Access Framework wallet workflow.
 
+For `0.3.0-alpha`, unnecessary debug/symbol information is stripped from the distributed Android Release library, reducing `libPlayTradeXSDK.so` from approximately **44 MB to 10 MB**.
+
 ---
 
 # PlayTradeX Updater
 
-`0.2.0-alpha` includes PlayTradeX package update tooling.
+`0.3.0-alpha` includes PlayTradeX package update tooling.
 
 The updater provides information about the installed package and available PlayTradeX releases.
 
 For Git installations, install tagged releases whenever possible:
 
 ```text
-https://github.com/ektishaf/playtradex-sdk-unity.git#v0.2.0-alpha
+https://github.com/ektishaf/playtradex-sdk-unity.git#v0.3.0-alpha
 ```
 
 A tagged installation gives the project a reproducible SDK revision.
@@ -883,22 +937,29 @@ Applications integrating PlayTradeX should follow these rules:
 
 ---
 
-# Migrating from `0.1.0-alpha`
+# Migrating to `0.3.0-alpha`
 
-The largest architectural change in `0.2.0-alpha` is the move from a single network configuration toward centralized multi-network and multi-wallet configuration.
+## From `0.2.0-alpha`
 
-## `0.1.0-alpha`
+The public Unity network/wallet API introduced in `0.2.0-alpha` remains compatible with `0.3.0-alpha`.
 
-```text
-Lifecycle
-    ↓
-Single RPC URL
-Single Chain ID
-    ↓
-Blockchain operations
-```
+The major change is inside the native RPC infrastructure. Existing multi-RPC network configurations now benefit from endpoint validation and automatic failover without requiring an API migration.
 
-## `0.2.0-alpha`
+When upgrading:
+
+1. Update the package/tag to `v0.3.0-alpha`.
+2. Keep the existing PlayTradeX Project Settings network and wallet configuration.
+3. Verify that each configured network has the correct Chain ID.
+4. Configure multiple valid HTTPS RPC endpoints where failover is desired.
+5. Replace/update the native Windows and Android binaries through the package update.
+6. Test balance queries, contract reads, transaction preparation, consent, and submission.
+7. Verify failure behavior with unavailable or wrong-chain RPC endpoints before shipping.
+
+> `0.3.0-alpha` provides failover rather than load balancing. Requests are not intentionally distributed across healthy endpoints.
+
+## From `0.1.0-alpha`
+
+Projects upgrading directly from `0.1.0-alpha` must also adopt the centralized multi-network and multi-wallet configuration introduced in `0.2.0-alpha`.
 
 ```text
 Project Settings > PlayTradeX
@@ -913,28 +974,16 @@ GeneratedNetworks
 GeneratedWallets
         ↓
 Network-aware / wallet-aware operations
+        ↓
+Validated RPC resolution + failover
 ```
 
-When upgrading:
-
-1. Open `Edit > Project Settings > PlayTradeX`.
-2. Move network configuration into the **Networks** section.
-3. Configure one or more RPC endpoints for each network.
-4. Add or generate application-managed wallets if required.
-5. Generate `GeneratedNetworks.cs`.
-6. Generate `GeneratedWallets.cs`.
-7. Update application code to select networks by network ID.
-8. Update external-wallet operations to select configured wallets by wallet ID.
-9. Use the `0.2.0-alpha` sample as the reference integration.
-10. Test transaction approval, wallet operations, and blockchain calls before shipping.
-
-Do not rely on a single scene-level RPC URL or Chain ID as the application's network model.
-
+Move network configuration into the **Networks** section, configure one or more RPC endpoints per network, generate the network/wallet constants, and use the current sample as the integration reference.
 ---
 
 # Alpha Notice
 
-PlayTradeX `0.2.0-alpha` is a prerelease intended for development, integration testing, and developer feedback.
+PlayTradeX `0.3.0-alpha` is a prerelease intended for development, integration testing, and developer feedback.
 
 APIs, configuration structures, behavior, platform support, and package structure may change before the stable `1.0.0` release.
 
@@ -944,7 +993,7 @@ Developers should thoroughly test wallet and transaction functionality in their 
 
 # Roadmap to PlayTradeX `1.0.0`
 
-`0.2.0-alpha` already introduces multi-network configuration and network-aware execution to the Unity SDK.
+`0.3.0-alpha` builds on multi-network execution with RPC chain validation, automatic failover, validation caching, and transaction RPC consistency.
 
 The planned December `1.0.0` release is intended to expand the SDK further across engines and platforms.
 
@@ -954,7 +1003,7 @@ Planned areas include:
 - **Continued Unity support** — sample, tooling, API, and integration improvements.
 - **macOS support**.
 - **iOS support**.
-- **Expanded network and RPC reliability**.
+- **Continued network and RPC reliability improvements**, including future RPC load-balancing work.
 - **Continued wallet lifecycle improvements**.
 - **Expanded SDK tooling and documentation**.
 - **Production-readiness work** across supported platforms.

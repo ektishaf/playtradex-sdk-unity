@@ -2,7 +2,7 @@
 
 [← Smart Contracts](contracts.md) · [Documentation Home](index.md)
 
-PlayTradeX `0.2.0-alpha` supports two wallet concepts:
+PlayTradeX `0.3.0-alpha` supports two wallet concepts:
 
 1.  The native **PlayTradeX identity wallet**
 2.  Developer-configured **external wallets**
@@ -12,7 +12,7 @@ platform-specific secure storage. External wallets can be configured in
 Unity Project Settings and selected through wallet IDs for transaction
 execution.
 
-> **Documentation target:** PlayTradeX `0.2.0-alpha` · Unity `6000.3`
+> **Documentation target:** PlayTradeX `0.3.0-alpha` · Unity `6000.3`
 
 ------------------------------------------------------------------------
 
@@ -35,6 +35,8 @@ PlayTradeX Wallet Sources
 
 Normal blockchain operations should begin only after PlayTradeX
 initialization succeeds.
+
+Wallet configuration and lifecycle behavior remain compatible with the previous Alpha release. `0.3.0-alpha` primarily improves the RPC reliability layer used by blockchain operations performed with these wallets.
 
 ------------------------------------------------------------------------
 
@@ -59,7 +61,7 @@ Its lifecycle includes:
 
 ## Configured External Wallets
 
-`0.2.0-alpha` adds application-managed wallet configuration under:
+`0.3.0-alpha` adds application-managed wallet configuration under:
 
 `Edit > Project Settings > PlayTradeX`
 
@@ -131,7 +133,7 @@ Read-only contract operations generally do not require a signing wallet.
 
 Native transfers and contract writes do.
 
-Use the included `0.2.0-alpha` sample as the compile-ready reference for
+Use the included `0.3.0-alpha` sample as the compile-ready reference for
 exact wallet-aware API overloads.
 
 ------------------------------------------------------------------------
@@ -192,7 +194,7 @@ persistent wallet state.
 
 ### Required Flow
 
-For `0.2.0-alpha`:
+For `0.3.0-alpha`:
 
 1.  Initialize PlayTradeX.
 2.  Import the wallet.
