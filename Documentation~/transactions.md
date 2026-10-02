@@ -7,10 +7,10 @@ PlayTradeX supports native EVM currency operations and
 transaction-producing smart contract operations through its Unity C#
 API.
 
-`0.5.0-alpha` retains network-aware execution and support for both the
+`0.8.0-alpha` retains network-aware execution and support for both the
 PlayTradeX identity wallet and configured external wallets.
 
-> **Documentation target:** PlayTradeX `0.5.0-alpha` · Unity `6000.3`\
+> **Documentation target:** PlayTradeX `0.8.0-alpha` · Unity `6000.3`  
 > PlayTradeX must be initialized before transaction APIs are used.
 
 ------------------------------------------------------------------------
@@ -37,7 +37,7 @@ Use the generated `GeneratedNetworks` and `GeneratedWallets` identifiers
 where appropriate.
 
 The included sample is the compile-ready reference for the exact
-`0.5.0-alpha` Unity overloads.
+`0.8.0-alpha` Unity overloads.
 
 ------------------------------------------------------------------------
 
@@ -112,7 +112,7 @@ string readable =
 
 ## Native Balance
 
-Native balance queries are network-aware in `0.5.0-alpha`.
+Native balance queries are network-aware in `0.8.0-alpha`.
 
 Select the configured network whose native currency balance should be
 queried and, where the API path requires a wallet selection, select the
@@ -156,10 +156,10 @@ string amountWei =
 
 A transfer selects:
 
--   Network ID
--   Destination address
--   Exact base-unit amount
--   PlayTradeX identity wallet or configured external wallet
+- Network ID
+- Destination address
+- Exact base-unit amount
+- PlayTradeX identity wallet or configured external wallet
 
 The native SDK constructs and executes the transaction using the
 selected execution context.
@@ -196,13 +196,13 @@ PlayTradeX supports application-controlled transaction consent.
 Before a transaction continues, the application can present information
 such as:
 
--   Contract or destination
--   Function
--   Parameters
--   Value
--   Estimated gas
--   Preparation status
--   Simulation information/errors where available
+- Contract or destination
+- Function
+- Parameters
+- Value
+- Estimated gas
+- Preparation status
+- Simulation information/errors where available
 
 Approve a pending transaction:
 
@@ -228,14 +228,22 @@ The included sample demonstrates the transaction-consent flow.
 
 ------------------------------------------------------------------------
 
-## Handling Responses
+## Submission Responses and Mined Events
 
-Always inspect the response:
+`SendEth` and transaction-producing contract writes have two distinct
+observable stages in `0.8.0-alpha`.
+
+### Submission Response
+
+The existing transaction response reports whether broadcast/submission
+succeeded:
 
 ``` csharp
 if (response.Success)
 {
-    // Continue with application-specific success handling.
+    Debug.Log(
+        "Submitted: " +
+        response.TransactionHash);
 }
 else
 {
@@ -244,8 +252,69 @@ else
 }
 ```
 
+A successful submission response can contain a transaction hash while
+its receipt is still empty.
+
+### Mined Transaction Event
+
+Subscribe through the Unity wrapper when the application needs the later
+mined outcome:
+
+``` csharp
+playTradeXUnity.TransactionMined += OnTransactionMined;
+
+private void OnTransactionMined(
+    TransactionEvent transactionEvent)
+{
+    if (transactionEvent.Status ==
+        TransactionEventStatus.Confirmed)
+    {
+        Debug.Log(
+            "Confirmed: " +
+            transactionEvent.TransactionHash);
+    }
+    else
+    {
+        Debug.LogError(
+            "Reverted: " +
+            transactionEvent.TransactionHash);
+    }
+
+    Debug.Log(
+        transactionEvent.Receipt);
+}
+```
+
+The event contains the PlayTradeX transaction ID, configured network ID,
+Chain ID, transaction hash, terminal `Confirmed` / `Reverted` status,
+and serialized receipt.
+
+Events are intentionally limited to mined terminal outcomes for
+`SendEth` and `Write`. Preparation, consent, signing, and submission
+lifecycle states remain internal.
+
 Do not expose private keys, wallet passwords, or other sensitive wallet
 data while diagnosing failures.
+
+------------------------------------------------------------------------
+
+## Transaction Lifecycle and Nonce Coordination
+
+`0.7.0-alpha` introduced internal lifecycle coordination for
+transaction-producing operations.
+
+For concurrent approved transactions using the same signer and
+configured network, PlayTradeX obtains a fresh pending nonce and
+reserves unique nonces internally before signing. The reservation
+remains associated with the submitted transaction until a terminal mined
+outcome is observed.
+
+This lifecycle is intentionally internal. Existing prepared-transaction
+and submission-response models remain the application-facing
+consent/submission API.
+
+`sequential=true` controls request/submission scheduling; it does not
+mean one transaction waits for another transaction to be mined.
 
 ------------------------------------------------------------------------
 
@@ -253,45 +322,63 @@ data while diagnosing failures.
 
 Networks can contain multiple RPC URLs.
 
-In `0.5.0-alpha`, PlayTradeX validates RPC endpoints against the configured network Chain ID before accepting them for execution. An endpoint that reports the wrong chain is rejected.
+In `0.8.0-alpha`, PlayTradeX validates RPC endpoints against the
+configured network Chain ID before accepting them for execution. An
+endpoint that reports the wrong chain is rejected.
 
-Eligible endpoints are initially sampled so successful operation latency can be learned. Once measurements are available, PlayTradeX can prefer the lowest-latency healthy endpoint. Concurrent requests retain reservation-aware selection, while eligible transport or HTTP failures can trigger automatic failover. Retryable operation failures can place an endpoint into runtime cooldown; after cooldown expires, the endpoint can automatically re-enter routing with its learned successful-latency history still available.
+Eligible endpoints are initially sampled so successful operation latency
+can be learned. Once measurements are available, PlayTradeX can prefer
+the lowest-latency healthy endpoint. Concurrent requests retain
+reservation-aware selection, while eligible transport or HTTP failures
+can trigger automatic failover. Retryable operation failures can place
+an endpoint into runtime cooldown; after cooldown expires, the endpoint
+can automatically re-enter routing with its learned successful-latency
+history still available.
 
-Successful chain-validation results are cached, while temporary validation failures are tracked separately. Distinct ordered RPC pools on the same chain maintain independent load-balancer state.
+Successful chain-validation results are cached, while temporary
+validation failures are tracked separately. Distinct ordered RPC pools
+on the same chain maintain independent load-balancer state.
 
-Transaction preparation resolves and retains its selected RPC so that approval/submission continues with the prepared endpoint rather than unnecessarily rebalancing after user consent.
+Transaction preparation resolves and retains its selected RPC so that
+approval/submission continues with the prepared endpoint rather than
+unnecessarily rebalancing after user consent.
 
-> `0.5.0-alpha` combines latency-aware smart routing with RPC validation, health tracking, automatic failover, and endpoint recovery.
+> `0.8.0-alpha` combines latency-aware smart routing with RPC
+> validation, health tracking, automatic failover, and endpoint
+> recovery.
 
-RPC endpoints remain external infrastructure and can fail, rate-limit requests, or become unavailable independently of PlayTradeX.
+RPC endpoints remain external infrastructure and can fail, rate-limit
+requests, or become unavailable independently of PlayTradeX.
 
 When diagnosing an operation, verify:
 
--   Correct network ID
--   Correct Chain ID
--   RPC reachability
--   Wallet balance
--   Sufficient native currency for gas
--   Destination/contract address
--   Transaction preparation/simulation errors
+- Correct network ID
+- Correct Chain ID
+- RPC reachability
+- Wallet balance
+- Sufficient native currency for gas
+- Destination/contract address
+- Transaction preparation/simulation errors
 
 ------------------------------------------------------------------------
 
 ## Transaction Integration Guidelines
 
--   Wait for successful SDK initialization.
--   Use configured network IDs.
--   Use configured wallet IDs instead of exposing private keys in
-    gameplay code.
--   Convert human-readable values with `PlayTradeXUnits`.
--   Avoid `float` and `double` for exact blockchain values.
--   Validate destination addresses and application input.
--   Present meaningful transaction information before approval.
--   Treat preparation/simulation failures separately from user denial.
--   Handle unsuccessful responses explicitly.
--   Use HTTPS RPC endpoints.
--   Never log private keys or wallet passwords.
--   Test with test networks and test assets before production use.
+- Wait for successful SDK initialization.
+- Use configured network IDs.
+- Use configured wallet IDs instead of exposing private keys in gameplay
+  code.
+- Convert human-readable values with `PlayTradeXUnits`.
+- Avoid `float` and `double` for exact blockchain values.
+- Validate destination addresses and application input.
+- Present meaningful transaction information before approval.
+- Treat preparation/simulation failures separately from user denial.
+- Handle unsuccessful submission responses explicitly.
+- Subscribe to `TransactionMined` when the application needs the later
+  mined receipt/status.
+- Use HTTPS RPC endpoints.
+- Never log private keys or wallet passwords.
+- Test with test networks and test assets before production use.
 
 ------------------------------------------------------------------------
 

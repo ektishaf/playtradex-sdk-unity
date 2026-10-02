@@ -1,8 +1,8 @@
 {
   "name": "com.playtradex.sdk",
-  "version": "0.5.0-alpha",
+  "version": "0.8.0-alpha",
   "displayName": "PlayTradeX SDK",
-  "description": "PlayTradeX SDK 0.5.0-alpha introduces Smart RPC Routing for Unity blockchain applications.\n\n• Successful RPC operation latency measurement\n• EMA based RPC latency tracking\n• Initial latency sampling across eligible RPC endpoints\n• Lowest latency healthy RPC endpoint selection\n• Smart routing with automatic failover, cooldown, and endpoint re-entry",
+  "description": "PlayTradeX SDK 0.8.0-alpha extends the Unity blockchain SDK with the features developed from 0.6.0 through 0.8.0.\n\n0.6.0 - Request Pipeline & Adaptive RPC Scoring\n\u2022 Independent concurrent requests and network scoped sequential queues\n\u2022 Adaptive RPC scoring using latency, reliability, failure penalties, and controlled exploration\n\n0.7.0 - Transaction Lifecycle\n\u2022 Internal transaction registry and signer/network coordination\n\u2022 Concurrent nonce reservation, consent lifecycle, signing/submission tracking, and receipt lifecycle integration\n\n0.8.0 - Events & Monitoring\n\u2022 Background receipt monitoring for SendEth and Write\n\u2022 Confirmed/Reverted mined transaction events with receipts\n\u2022 Public C++, C ABI, and Unity C# event bridges",
   "unity": "6000.3",
   "documentationUrl": "https://github.com/ektishaf/playtradex-sdk-unity/blob/main/Documentation~/index.md",
   "licensesUrl": "https://github.com/ektishaf/playtradex-sdk-unity/blob/main/LICENSE.md",
@@ -26,7 +26,7 @@
   "samples": [
     {
       "displayName": "PlayTradeX Sample",
-      "description": "PlayTradeX SDK 0.5.0-alpha Smart RPC Routing sample for Unity.\n\n• RPC latency measurement during successful operations\n• Initial latency sampling across eligible endpoints\n• Lowest latency healthy RPC selection\n• Automatic routing away from temporarily unhealthy endpoints\n• Automatic return to faster RPC endpoints after recovery",
+      "description": "PlayTradeX SDK 0.8.0-alpha Unity sample covering the additions from 0.6.0 through 0.8.0.\n\n0.6.0 - Request Pipeline & Adaptive RPC Scoring\n\u2022 Demonstrates normal Unity operations on top of concurrent/network scoped request scheduling and adaptive RPC routing\n\n0.7.0 - Transaction Lifecycle\n\u2022 Demonstrates transaction consent, submission, and concurrent transaction lifecycle behavior\n\n0.8.0 - Events & Monitoring\n\u2022 Demonstrates separate submission responses and later TransactionMined events\n\u2022 Displays Confirmed/Reverted status, transaction hash, network/chain information, and mined receipt",
       "path": "Samples~/PlayTradeX"
     }
   ]

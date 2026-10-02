@@ -2,7 +2,7 @@
 
 [← Smart Contracts](contracts.md) · [Documentation Home](index.md)
 
-PlayTradeX `0.5.0-alpha` supports two wallet concepts:
+PlayTradeX `0.8.0-alpha` supports two wallet concepts:
 
 1.  The native **PlayTradeX identity wallet**
 2.  Developer-configured **external wallets**
@@ -12,7 +12,7 @@ platform-specific secure storage. External wallets can be configured in
 Unity Project Settings and selected through wallet IDs for transaction
 execution.
 
-> **Documentation target:** PlayTradeX `0.5.0-alpha` · Unity `6000.3`
+> **Documentation target:** PlayTradeX `0.8.0-alpha` · Unity `6000.3`
 
 ------------------------------------------------------------------------
 
@@ -36,7 +36,11 @@ PlayTradeX Wallet Sources
 Normal blockchain operations should begin only after PlayTradeX
 initialization succeeds.
 
-Wallet configuration and lifecycle behavior remain compatible with the previous Alpha release. `0.5.0-alpha` primarily expands the native RPC layer with latency-aware smart routing while preserving runtime endpoint health tracking and automatic failover for blockchain operations performed with these wallets.
+Wallet configuration remains compatible with the earlier Alpha releases.
+`0.8.0-alpha` adds request scheduling, internal transaction
+lifecycle/nonce coordination, and mined transaction monitoring around
+transaction-producing operations while preserving the existing
+identity-wallet and configured external-wallet model.
 
 ------------------------------------------------------------------------
 
@@ -51,25 +55,25 @@ wallet source.
 
 Its lifecycle includes:
 
--   Creation/loading
--   Secure persistent storage
--   Transaction signing
--   Encrypted export
--   Encrypted import
+- Creation/loading
+- Secure persistent storage
+- Transaction signing
+- Encrypted export
+- Encrypted import
 
 ------------------------------------------------------------------------
 
 ## Configured External Wallets
 
-`0.5.0-alpha` retains application-managed wallet configuration under:
+`0.8.0-alpha` retains application-managed wallet configuration under:
 
 `Edit > Project Settings > PlayTradeX`
 
 A configured external wallet can contain:
 
--   Wallet ID
--   Address
--   Private key
+- Wallet ID
+- Address
+- Private key
 
 The wallet ID is the developer-facing identifier.
 
@@ -78,9 +82,9 @@ private key through gameplay systems.
 
 You can:
 
--   Add an existing wallet manually
--   Generate a wallet from PlayTradeX Project Settings
--   Add the generated wallet to the project configuration
+- Add an existing wallet manually
+- Generate a wallet from PlayTradeX Project Settings
+- Add the generated wallet to the project configuration
 
 > External wallets in Project Settings are developer/application-managed
 > credentials. Developers are responsible for determining whether this
@@ -133,7 +137,7 @@ Read-only contract operations generally do not require a signing wallet.
 
 Native transfers and contract writes do.
 
-Use the included `0.5.0-alpha` sample as the compile-ready reference for
+Use the included `0.8.0-alpha` sample as the compile-ready reference for
 exact wallet-aware API overloads.
 
 ------------------------------------------------------------------------
@@ -148,12 +152,12 @@ storage.
 
 Application code should never copy private keys into:
 
--   `PlayerPrefs`
--   Debug output
--   Analytics events
--   Logs
--   Unprotected application storage
--   Network requests that do not explicitly require the secret
+- `PlayerPrefs`
+- Debug output
+- Analytics events
+- Logs
+- Unprotected application storage
+- Network requests that do not explicitly require the secret
 
 ------------------------------------------------------------------------
 
@@ -173,12 +177,12 @@ the SDK supports Android `content://` document URIs.
 
 ### Export Security
 
--   Never log the export password.
--   Never log exported wallet contents.
--   Do not upload wallet backups without explicit user intent.
--   Treat the exported `.ptx` file as sensitive even though it is
-    encrypted.
--   Make the destination and backup operation clear to the user.
+- Never log the export password.
+- Never log exported wallet contents.
+- Do not upload wallet backups without explicit user intent.
+- Treat the exported `.ptx` file as sensitive even though it is
+  encrypted.
+- Make the destination and backup operation clear to the user.
 
 ------------------------------------------------------------------------
 
@@ -194,7 +198,7 @@ persistent wallet state.
 
 ### Required Flow
 
-For `0.5.0-alpha`:
+For `0.8.0-alpha`:
 
 1.  Initialize PlayTradeX.
 2.  Import the wallet.
@@ -236,12 +240,12 @@ storage permissions for the wallet document-picker workflow.
 
 The Android integration includes:
 
--   Keystore-backed secure storage
--   Content URI access
--   System document picker integration
--   Wallet export
--   Wallet import
--   Native SDK platform initialization
+- Keystore-backed secure storage
+- Content URI access
+- System document picker integration
+- Wallet export
+- Wallet import
+- Native SDK platform initialization
 
 ------------------------------------------------------------------------
 
@@ -249,17 +253,17 @@ The Android integration includes:
 
 Applications integrating PlayTradeX should never:
 
--   Log private keys.
--   Commit real private keys to source control.
--   Store private keys in `PlayerPrefs`.
--   Log wallet passwords.
--   Display private keys unnecessarily.
--   Pass private keys throughout gameplay code when a configured wallet
-    ID can be used.
--   Upload wallet backups without explicit user intent.
--   Continue using the previous identity-wallet session after successful
-    import.
--   Disable TLS certificate verification for blockchain networking.
+- Log private keys.
+- Commit real private keys to source control.
+- Store private keys in `PlayerPrefs`.
+- Log wallet passwords.
+- Display private keys unnecessarily.
+- Pass private keys throughout gameplay code when a configured wallet ID
+  can be used.
+- Upload wallet backups without explicit user intent.
+- Continue using the previous identity-wallet session after successful
+  import.
+- Disable TLS certificate verification for blockchain networking.
 
 Applications should clearly communicate wallet backup and restore
 actions and test the complete lifecycle on every supported target
@@ -274,13 +278,11 @@ Project Settings are application/developer-managed configuration.
 
 Before shipping a product with such a wallet, consider:
 
--   Who owns the wallet
--   Whether the credential should exist in the client build
--   Whether the wallet is intended only for development/testing
--   Whether a server-side or user-owned signing model is more
-    appropriate
--   What an attacker could do if the client-side credential were
-    extracted
+- Who owns the wallet
+- Whether the credential should exist in the client build
+- Whether the wallet is intended only for development/testing
+- Whether a server-side or user-owned signing model is more appropriate
+- What an attacker could do if the client-side credential were extracted
 
 Do not use a high-value production private key in a client application
 merely because the SDK supports external-wallet execution.
@@ -295,14 +297,14 @@ Restart the application before resuming normal blockchain operations.
 
 After restart, wait for PlayTradeX to initialize successfully before:
 
--   Querying balances
--   Sending transactions
--   Performing contract writes
+- Querying balances
+- Sending transactions
+- Performing contract writes
 
 Continue with:
 
--   [Transactions](transactions.md)
--   [Smart Contracts](contracts.md)
+- [Transactions](transactions.md)
+- [Smart Contracts](contracts.md)
 
 ------------------------------------------------------------------------
 

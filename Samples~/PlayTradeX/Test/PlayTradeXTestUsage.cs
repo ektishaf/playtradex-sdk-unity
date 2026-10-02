@@ -146,6 +146,9 @@ public class PlayTradeXTestUsage : MonoBehaviour
         playtradexUnity.NotReady +=
             PlayTradeXUnity_NotReady;
 
+        playtradexUnity.TransactionMined +=
+            PlayTradeXUnity_TransactionMined;
+
 
         if (networkDropdown != null)
         {
@@ -178,6 +181,9 @@ public class PlayTradeXTestUsage : MonoBehaviour
 
             playtradexUnity.NotReady -=
                 PlayTradeXUnity_NotReady;
+
+            playtradexUnity.TransactionMined -=
+                PlayTradeXUnity_TransactionMined;
         }
 
 
@@ -537,6 +543,45 @@ public class PlayTradeXTestUsage : MonoBehaviour
         {
             walletAddressText.text =
                 string.Empty;
+        }
+    }
+
+    // ============================================================
+    // Transaction Events
+    // ============================================================
+
+    private void PlayTradeXUnity_TransactionMined(
+        TransactionEvent transactionEvent)
+    {
+        if (transactionEvent == null)
+        {
+            activityLog?.Fail(
+                "[PlayTradeX] Received null transaction mined event.");
+
+            return;
+        }
+
+
+        string message =
+            "[PlayTradeX] Transaction mined.\n" +
+            $"Transaction ID: {transactionEvent.TransactionId}\n" +
+            $"Network: {transactionEvent.NetworkId}\n" +
+            $"Chain ID: {transactionEvent.ChainId}\n" +
+            $"TxHash: {transactionEvent.TransactionHash}\n" +
+            $"Status: {transactionEvent.Status}\n" +
+            $"Receipt: {transactionEvent.Receipt}";
+
+
+        if (transactionEvent.Status ==
+            TransactionEventStatus.Confirmed)
+        {
+            activityLog?.Success(
+                message);
+        }
+        else
+        {
+            activityLog?.Fail(
+                message);
         }
     }
 

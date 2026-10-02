@@ -140,6 +140,42 @@ namespace PlayTradeX
             internal IntPtr receipt;
         }
 
+        // ========================================================
+        // Native Transaction Event Types
+        // ========================================================
+
+        /// <summary>
+        /// Terminal mined state reported by the native SDK.
+        /// Values must match CPlayTradeXTransactionEventStatus.
+        /// </summary>
+        internal enum TransactionEventStatus
+        {
+            Confirmed = 0,
+            Reverted = 1
+        }
+
+
+        /// <summary>
+        /// Native mined transaction event.
+        ///
+        /// Field order must exactly match
+        /// CPlayTradeXTransactionEvent.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct TransactionEvent
+        {
+            internal IntPtr transactionId;
+            internal IntPtr networkId;
+
+            internal ulong chainId;
+
+            internal IntPtr transactionHash;
+
+            internal TransactionEventStatus status;
+
+            internal IntPtr receipt;
+        }
+
 
         /// <summary>
         /// Native response returned by human-readable ABI conversion.
@@ -294,6 +330,15 @@ namespace PlayTradeX
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate void TransactionCallback(
             TransactionResponse response,
+            IntPtr userData);
+
+        /// <summary>
+        /// Callback invoked when a submitted transaction reaches
+        /// a terminal mined state.
+        /// </summary>
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate void TransactionEventCallback(
+            TransactionEvent transactionEvent,
             IntPtr userData);
 
 

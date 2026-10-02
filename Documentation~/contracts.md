@@ -6,11 +6,11 @@
 PlayTradeX supports read and write operations against EVM-compatible
 smart contracts through its Unity C# API.
 
-`0.5.0-alpha` retains network-aware contract execution and allows
+`0.8.0-alpha` retains network-aware contract execution and allows
 transaction-producing writes to use the PlayTradeX identity wallet or a
 configured external wallet.
 
-> **Documentation target:** PlayTradeX `0.5.0-alpha` · Unity `6000.3`\
+> **Documentation target:** PlayTradeX `0.8.0-alpha` · Unity `6000.3`  
 > PlayTradeX must be initialized before contract APIs are used.
 
 ------------------------------------------------------------------------
@@ -22,10 +22,10 @@ transaction.
 
 A read selects:
 
--   Configured network
--   Contract address
--   Human-readable function ABI/signature
--   Function parameters
+- Configured network
+- Contract address
+- Human-readable function ABI/signature
+- Function parameters
 
 A signing wallet is not required for a normal read-only call.
 
@@ -54,7 +54,7 @@ else
 ```
 
 Use the included sample for the exact network-aware `ReadAsync`
-signature exposed by `0.5.0-alpha`.
+signature exposed by `0.8.0-alpha`.
 
 ------------------------------------------------------------------------
 
@@ -64,12 +64,12 @@ Write operations create blockchain transactions.
 
 A write selects:
 
--   Configured network
--   Signing wallet
--   Contract address
--   Function
--   Parameters
--   Transaction value where applicable
+- Configured network
+- Signing wallet
+- Contract address
+- Function
+- Parameters
+- Transaction value where applicable
 
 Conceptually:
 
@@ -85,7 +85,9 @@ Write
 ```
 
 Because writes create transactions, applications should integrate them
-with the PlayTradeX transaction approval flow.
+with the PlayTradeX transaction approval flow. After successful
+submission, `0.8.0-alpha` can later raise `TransactionMined` with a
+`Confirmed` or `Reverted` status and the serialized receipt.
 
 See [Transactions → Transaction
 Approval](transactions.md#transaction-approval).
@@ -109,7 +111,13 @@ constants rather than raw strings.
 The selected network determines the EVM chain and RPC configuration used
 for the call.
 
-In `0.5.0-alpha`, configured RPC endpoints are validated against that network's Chain ID. Contract reads use the centralized RPC execution path, contribute successful-operation latency measurements, and can be routed toward the lowest-latency healthy eligible endpoint after initial sampling. Eligible failures can still trigger automatic failover. Wrong-chain and temporarily unhealthy endpoints are excluded from normal selection until eligible again.
+In `0.8.0-alpha`, configured RPC endpoints are validated against that
+network's Chain ID. Contract reads use the centralized RPC execution
+path, contribute successful-operation latency measurements, and can be
+routed toward the lowest-latency healthy eligible endpoint after initial
+sampling. Eligible failures can still trigger automatic failover.
+Wrong-chain and temporarily unhealthy endpoints are excluded from normal
+selection until eligible again.
 
 ------------------------------------------------------------------------
 
@@ -160,9 +168,9 @@ Paste a standard JSON contract ABI.
 The converter can generate a C# contract interface containing
 human-readable function information and can optionally embed:
 
--   Contract ABI
--   Human-readable ABI
--   Contract address
+- Contract ABI
+- Human-readable ABI
+- Contract address
 
 This reduces manual maintenance of Solidity function signatures
 throughout a Unity project.
@@ -171,14 +179,15 @@ throughout a Unity project.
 
 ## Read vs. Write
 
-  -------------------------------------------------------------------------
-  Operation         Changes blockchain  Creates transaction Signing wallet
-                                 state                      
-  --------------- -------------------- -------------------- ---------------
-  Contract read                     No                   No No
+------------------------------------------------------------------------
 
-  Contract write                   Yes                  Yes Yes
-  -------------------------------------------------------------------------
+Operation Changes blockchain Creates transaction Signing wallet state
+
+------------------------------------------------------------------------
+
+Contract read No No No
+
+## Contract write Yes Yes Yes
 
 Treat write operations as transactions and present appropriate consent
 information before approval.
@@ -202,32 +211,34 @@ See [Transactions](transactions.md) for transaction-consent guidance.
 
 ## Integration Guidelines
 
--   Wait for successful SDK initialization before contract calls.
--   Select the intended configured network.
--   Verify the target contract address.
--   Verify the human-readable function ABI/signature.
--   Keep parameters in the format expected by the target function.
--   Handle unsuccessful responses explicitly.
--   Use transaction consent for writes.
--   Select the intended signing wallet for writes.
--   Avoid logging private keys or other sensitive wallet information.
--   Use HTTPS RPC endpoints.
--   Test against the intended network and deployed contract before
-    production use.
+- Wait for successful SDK initialization before contract calls.
+- Select the intended configured network.
+- Verify the target contract address.
+- Verify the human-readable function ABI/signature.
+- Keep parameters in the format expected by the target function.
+- Handle unsuccessful responses explicitly.
+- Use transaction consent for writes.
+- Select the intended signing wallet for writes.
+- Avoid logging private keys or other sensitive wallet information.
+- Use HTTPS RPC endpoints.
+- Test against the intended network and deployed contract before
+  production use.
 
 ------------------------------------------------------------------------
 
-## `0.5.0-alpha` Change from the Previous Release
+## `0.8.0-alpha` Transaction Changes
 
-Multi-network and multi-RPC configuration remain part of the current Unity SDK architecture.
+Contract reads continue to use the adaptive, validated RPC routing
+infrastructure.
 
-`0.5.0-alpha` adds latency-aware smart RPC routing on top of the validation, automatic failover, runtime health, and load-balancing foundation from earlier Alpha releases. Successful contract-read operations can contribute latency measurements; after eligible endpoints are sampled, routing can prefer the lowest-latency healthy endpoint. Transaction-producing writes can benefit from smart RPC resolution during preparation, then retain the prepared RPC through approval/submission.
+For contract writes, the post-`0.5` transaction work adds network-scoped
+request scheduling, internal lifecycle/nonce coordination, and mined
+receipt monitoring. A write still reports successful submission through
+its existing transaction response. Later, `TransactionMined` reports the
+terminal `Confirmed` or `Reverted` result together with the receipt.
 
-Runtime endpoint cooldown/re-entry, concurrent reservation protection, generation-safe cursor management, per-pool load-balancer isolation, and RPC performance tracking are handled by the native RPC infrastructure.
-
-The broader `1.0.0` roadmap continues toward Unreal Engine support,
-additional native platforms, expanded reliability, tooling, and
-production readiness.
+The event layer does not expose preparation, consent, signing, or
+submitted lifecycle states.
 
 ------------------------------------------------------------------------
 

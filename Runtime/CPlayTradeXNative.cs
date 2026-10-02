@@ -99,6 +99,32 @@ namespace PlayTradeX
             CallingConvention = CallingConvention.Cdecl)]
         internal static extern int CPlayTradeX_IsInitialized();
 
+        // ========================================================
+        // Transaction Events
+        // ========================================================
+
+        /// <summary>
+        /// Subscribes to mined transaction events.
+        /// </summary>
+        [DllImport(
+            LibraryName,
+            CallingConvention = CallingConvention.Cdecl)]
+        internal static extern ulong
+            CPlayTradeX_SubscribeTransactionEvents(
+                TransactionEventCallback callback,
+                IntPtr userData);
+
+
+        /// <summary>
+        /// Unsubscribes a previously registered transaction event listener.
+        /// </summary>
+        [DllImport(
+            LibraryName,
+            CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int
+            CPlayTradeX_UnsubscribeTransactionEvents(
+                ulong listenerId);
+
 
         // ========================================================
         // Transaction Consent

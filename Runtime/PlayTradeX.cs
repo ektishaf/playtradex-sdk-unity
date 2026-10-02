@@ -44,6 +44,16 @@ namespace PlayTradeX
         /// </summary>
         public static event Action<bool> InitializationChanged;
 
+        /// <summary>
+        /// Raised when a transaction submitted through PlayTradeX
+        /// reaches a terminal mined state.
+        ///
+        /// The event is raised for confirmed and reverted transactions
+        /// and includes the blockchain receipt.
+        /// </summary>
+        public static event Action<TransactionEvent>
+            TransactionMined;
+
 
         // ========================================================
         // Native Callback References
@@ -73,6 +83,9 @@ namespace PlayTradeX
         private static readonly CPlayTradeXNative.TransactionCallback
             NativeTransactionCallback = OnNativeTransaction;
 
+        private static readonly CPlayTradeXNative.TransactionEventCallback
+            NativeTransactionEventCallback = OnNativeTransactionEvent;
+
         private static readonly CPlayTradeXNative.HumanReadableAbiCallback
             NativeHumanReadableAbiCallback = OnNativeHumanReadableAbi;
 
@@ -85,6 +98,12 @@ namespace PlayTradeX
         private static readonly CPlayTradeXNative.WalletImportCallback
             NativeWalletImportCallback = OnNativeWalletImport;
 
+        // ========================================================
+        // Transaction Event State
+        // ========================================================
+
+        private static ulong
+            _transactionEventListenerId;
 
         // ========================================================
         // Transaction Consent
@@ -728,6 +747,11 @@ namespace PlayTradeX
 
                 RunOnUnityThread(() =>
                 {
+                    if (result.Initialized)
+                    {
+                        EnsureTransactionEventSubscription();
+                    }
+
                     NotifyInitializationChanged(
                         result.Initialized);
 
@@ -799,6 +823,7 @@ namespace PlayTradeX
                 _transactionConsentCallback =
                     null;
 
+                _transactionEventListenerId = 0;
 
                 try
                 {
@@ -1385,6 +1410,66 @@ namespace PlayTradeX
             {
                 FreeRequestContext(
                     userData);
+            }
+        }
+
+        // ========================================================
+        // Transaction Mined Event
+        // ========================================================
+
+        [MonoPInvokeCallback(
+            typeof(CPlayTradeXNative.TransactionEventCallback))]
+        private static void OnNativeTransactionEvent(
+            CPlayTradeXNative.TransactionEvent nativeEvent,
+            IntPtr userData)
+        {
+            try
+            {
+                /*
+                 * Native strings are temporary.
+                 * Copy every value before returning from this callback.
+                 */
+
+                TransactionEventStatus status =
+                    nativeEvent.status ==
+                        CPlayTradeXNative.TransactionEventStatus.Reverted
+                        ? TransactionEventStatus.Reverted
+                        : TransactionEventStatus.Confirmed;
+
+
+                TransactionEvent transactionEvent =
+                    new TransactionEvent(
+                        CPlayTradeXNative.GetString(
+                            nativeEvent.transactionId),
+
+                        CPlayTradeXNative.GetString(
+                            nativeEvent.networkId),
+
+                        nativeEvent.chainId,
+
+                        CPlayTradeXNative.GetString(
+                            nativeEvent.transactionHash),
+
+                        status,
+
+                        CPlayTradeXNative.GetString(
+                            nativeEvent.receipt));
+
+
+                RunOnUnityThread(() =>
+                {
+                    SafeInvoke(() =>
+                    {
+                        TransactionMined?.Invoke(
+                            transactionEvent);
+                    });
+                });
+            }
+            catch (Exception exception)
+            {
+                SafeLogError(
+                    "[PlayTradeX Unity] Transaction event callback failed: " +
+                    exception);
             }
         }
 
@@ -2074,6 +2159,27 @@ namespace PlayTradeX
 
                 CPlayTradeXNative.GetString(
                     nativeResponse.receipt));
+        }
+
+        private static void EnsureTransactionEventSubscription()
+        {
+            if (_transactionEventListenerId != 0)
+            {
+                return;
+            }
+
+            _transactionEventListenerId =
+                CPlayTradeXNative
+                    .CPlayTradeX_SubscribeTransactionEvents(
+                        NativeTransactionEventCallback,
+                        IntPtr.Zero);
+
+            if (_transactionEventListenerId == 0)
+            {
+                SafeLogError(
+                    "[PlayTradeX Unity] Failed to subscribe to " +
+                    "native transaction events.");
+            }
         }
 
 

@@ -203,6 +203,62 @@ namespace PlayTradeX
         }
     }
 
+    /// <summary>
+    /// Terminal mined state of a PlayTradeX transaction.
+    /// </summary>
+    public enum TransactionEventStatus
+    {
+        Confirmed = 0,
+        Reverted = 1
+    }
+
+
+    /// <summary>
+    /// Represents a submitted transaction that has been mined.
+    /// </summary>
+    public sealed class TransactionEvent
+    {
+        public string TransactionId { get; }
+
+        public string NetworkId { get; }
+
+        public ulong ChainId { get; }
+
+        public string TransactionHash { get; }
+
+        public TransactionEventStatus Status { get; }
+
+        public string Receipt { get; }
+
+
+        internal TransactionEvent(
+            string transactionId,
+            string networkId,
+            ulong chainId,
+            string transactionHash,
+            TransactionEventStatus status,
+            string receipt)
+        {
+            TransactionId =
+                transactionId ?? string.Empty;
+
+            NetworkId =
+                networkId ?? string.Empty;
+
+            ChainId =
+                chainId;
+
+            TransactionHash =
+                transactionHash ?? string.Empty;
+
+            Status =
+                status;
+
+            Receipt =
+                receipt ?? string.Empty;
+        }
+    }
+
 
     /// <summary>
     /// Represents the human-readable form of a contract ABI.

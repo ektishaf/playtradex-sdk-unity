@@ -4,21 +4,21 @@
 →](transactions.md)
 
 This guide walks through the minimum setup required to configure and
-initialize PlayTradeX `0.5.0-alpha` in a Unity project.
+initialize PlayTradeX `0.8.0-alpha` in a Unity project.
 
-> **Documentation target:** PlayTradeX `0.5.0-alpha` · Unity `6000.3`
+> **Documentation target:** PlayTradeX `0.8.0-alpha` · Unity `6000.3`
 
 ------------------------------------------------------------------------
 
 ## Requirements
 
--   Unity `6000.3`
--   Windows x64 or Android arm64-v8a
--   Android API Level 26 or newer
--   Internet access for blockchain operations
--   At least one configured EVM network
--   At least one working HTTPS RPC endpoint for every network you intend
-    to use
+- Unity `6000.3`
+- Windows x64 or Android arm64-v8a
+- Android API Level 26 or newer
+- Internet access for blockchain operations
+- At least one configured EVM network
+- At least one working HTTPS RPC endpoint for every network you intend
+  to use
 
 ------------------------------------------------------------------------
 
@@ -35,7 +35,7 @@ Choose:
 Enter:
 
 ``` text
-https://github.com/ektishaf/playtradex-sdk-unity.git#v0.5.0-alpha
+https://github.com/ektishaf/playtradex-sdk-unity.git#v0.8.0-alpha
 ```
 
 Using the tagged release is recommended so the project is pinned to this
@@ -46,7 +46,7 @@ You can also add PlayTradeX to `Packages/manifest.json`:
 ``` json
 {
   "dependencies": {
-    "com.playtradex.sdk": "https://github.com/ektishaf/playtradex-sdk-unity.git#v0.5.0-alpha"
+    "com.playtradex.sdk": "https://github.com/ektishaf/playtradex-sdk-unity.git#v0.8.0-alpha"
   }
 }
 ```
@@ -59,7 +59,7 @@ Open:
 
 `Edit > Project Settings > PlayTradeX`
 
-This is the central configuration surface for `0.5.0-alpha`.
+This is the central configuration surface for `0.8.0-alpha`.
 
 PlayTradeX stores project configuration under:
 
@@ -101,14 +101,14 @@ Add the EVM networks the application needs.
 
 A network configuration can contain:
 
--   `ID`
--   `Network Name`
--   `RPC URLs`
--   `Chain ID`
--   `Symbol`
--   `Block Explorer URL`
--   `Is Testnet`
--   `Preset ID`
+- `ID`
+- `Network Name`
+- `RPC URLs`
+- `Chain ID`
+- `Symbol`
+- `Block Explorer URL`
+- `Is Testnet`
+- `Preset ID`
 
 Example:
 
@@ -120,14 +120,24 @@ Symbol:             tBNB
 Block Explorer URL: https://testnet.bscscan.com
 ```
 
-The **ID** is the stable developer-facing identifier used by code.\
+The **ID** is the stable developer-facing identifier used by code.  
 The **Network Name** is the human-readable network name.
 
 A network can contain multiple RPC URLs.
 
-In `0.5.0-alpha`, PlayTradeX validates configured endpoints against the network Chain ID, samples eligible endpoints, records successful operation latency, prefers the lowest-latency healthy endpoint after sampling, and can automatically fail over after eligible RPC failures. Wrong-chain endpoints are rejected. Validation results are cached, retryable operation failures contribute to runtime endpoint health, and temporarily unavailable endpoints can enter a cooldown before automatically becoming eligible for retry.
+In `0.8.0-alpha`, PlayTradeX validates configured endpoints against the
+network Chain ID, samples eligible endpoints, records successful
+operation latency, prefers the lowest-latency healthy endpoint after
+sampling, and can automatically fail over after eligible RPC failures.
+Wrong-chain endpoints are rejected. Validation results are cached,
+retryable operation failures contribute to runtime endpoint health, and
+temporarily unavailable endpoints can enter a cooldown before
+automatically becoming eligible for retry.
 
-> Multiple RPC URLs enable smart routing and failover in `0.5.0-alpha`. Unmeasured eligible endpoints are sampled before latency preference takes over; concurrent requests retain reservation-aware behavior, and distinct RPC pools maintain independent load-balancer state.
+> Multiple RPC URLs enable smart routing and failover in `0.8.0-alpha`.
+> Unmeasured eligible endpoints are sampled before latency preference
+> takes over; concurrent requests retain reservation-aware behavior, and
+> distinct RPC pools maintain independent load-balancer state.
 
 ------------------------------------------------------------------------
 
@@ -135,24 +145,24 @@ In `0.5.0-alpha`, PlayTradeX validates configured endpoints against the network 
 
 The Networks section provides:
 
--   **Add Testnet**
--   **Add All Testnets**
--   **Remove Testnets**
--   **Generate Class**
+- **Add Testnet**
+- **Add All Testnets**
+- **Remove Testnets**
+- **Generate Class**
 
 `Add Testnet` lets you select a built-in PlayTradeX testnet preset.
 
 The initial preset catalog includes:
 
--   Ethereum Sepolia
--   Binance Smart Chain Testnet
--   opBNB Testnet
--   Polygon Amoy
--   Arbitrum Sepolia
--   Avalanche Fuji C-Chain
--   Linea Sepolia
--   ZKsync Era Sepolia
--   Gnosis Chiado
+- Ethereum Sepolia
+- Binance Smart Chain Testnet
+- opBNB Testnet
+- Polygon Amoy
+- Arbitrum Sepolia
+- Avalanche Fuji C-Chain
+- Linea Sepolia
+- ZKsync Era Sepolia
+- Gnosis Chiado
 
 Preset configuration includes network ID, network name, ecosystem, chain
 ID, native symbol, RPC URL(s), explorer URL, and testnet classification.
@@ -193,9 +203,9 @@ addition to the native PlayTradeX identity wallet.
 
 A configured external wallet can contain:
 
--   Wallet ID
--   Address
--   Private key
+- Wallet ID
+- Address
+- Private key
 
 You can add an existing wallet manually or use the PlayTradeX wallet
 generation workflow.
@@ -235,19 +245,20 @@ sample.
 
 The sample demonstrates:
 
--   SDK initialization
--   Network selection
--   Wallet selection
--   Native balance retrieval
--   Native currency transfers
--   Contract reads
--   Contract writes
--   Transaction consent
--   Wallet export/import
--   Response handling
+- SDK initialization
+- Network selection
+- Wallet selection
+- Native balance retrieval
+- Native currency transfers
+- Contract reads
+- Contract writes
+- Transaction consent
+- Wallet export/import
+- Response handling
+- Transaction mined events with Confirmed/Reverted receipts
 
 For a first integration, the sample is the recommended reference for the
-exact `0.5.0-alpha` network/wallet API usage.
+exact `0.8.0-alpha` network/wallet API usage.
 
 ### Sample UI Requirements
 
@@ -268,7 +279,7 @@ targeted Unity Editor version.
 
 Add `PlayTradeXLifecycle` to a GameObject in the initial scene.
 
-In `0.5.0-alpha`, network RPC URLs and Chain IDs belong to the
+In `0.8.0-alpha`, network RPC URLs and Chain IDs belong to the
 PlayTradeX network configuration rather than a single lifecycle-level
 network configuration.
 
@@ -298,6 +309,35 @@ object.
 
 ------------------------------------------------------------------------
 
+## React to Mined Transaction Events
+
+`0.8.0-alpha` exposes a separate mined event for transactions submitted
+through `SendEth` and `Write`.
+
+``` csharp
+playTradeXUnity.TransactionMined += OnTransactionMined;
+
+private void OnTransactionMined(
+    TransactionEvent transactionEvent)
+{
+    Debug.Log(
+        $"{transactionEvent.Status}: " +
+        transactionEvent.TransactionHash);
+
+    Debug.Log(
+        transactionEvent.Receipt);
+}
+```
+
+The normal transaction response still reports successful submission
+first. `TransactionMined` is raised later when a receipt is available
+and reports either `Confirmed` or `Reverted`.
+
+Manage the event subscription according to the lifetime of the
+subscribing Unity object.
+
+------------------------------------------------------------------------
+
 ## Check the Current Initialization State
 
 ``` csharp
@@ -314,7 +354,7 @@ Use `PlayTradeXUnity.Ready` to react to initialization and
 
 ## Network and Wallet Selection
 
-The `0.5.0-alpha` execution model is:
+The `0.8.0-alpha` execution model is:
 
 ``` text
 Operation
@@ -338,11 +378,11 @@ the exact overloads exposed by the installed package.
 
 Continue with:
 
--   [Transactions](transactions.md) --- units, balances, transfers,
-    networks, wallets, and transaction approval
--   [Smart Contracts](contracts.md) --- network-aware reads and writes
--   [Wallet Management](wallet.md) --- identity wallet, external
-    wallets, secure storage, export, and import
+- [Transactions](transactions.md) --- units, balances, transfers,
+  networks, wallets, and transaction approval
+- [Smart Contracts](contracts.md) --- network-aware reads and writes
+- [Wallet Management](wallet.md) --- identity wallet, external wallets,
+  secure storage, export, and import
 
 ------------------------------------------------------------------------
 
@@ -355,11 +395,11 @@ Unity code does not need to manually provide an Android `Context`.
 
 The Android integration provides:
 
--   Android Keystore-backed secure storage
--   Android document/content URI access
--   Wallet backup and restore through the system document picker
--   CA certificate setup
--   Native PlayTradeX library loading
+- Android Keystore-backed secure storage
+- Android document/content URI access
+- Wallet backup and restore through the system document picker
+- CA certificate setup
+- Native PlayTradeX library loading
 
 Current Android target:
 
@@ -382,13 +422,14 @@ If PlayTradeX is not ready or an operation fails, verify:
     configuration.
 3.  The selected network ID exists.
 4.  The network has the correct Chain ID.
-5.  At least one configured RPC endpoint is valid, reachable, and reports the expected Chain ID.
+5.  At least one configured RPC endpoint is valid, reachable, and
+    reports the expected Chain ID.
 6.  The selected external wallet ID exists when an external wallet is
     requested.
 7.  Generated network/wallet classes were regenerated after ID changes.
 8.  Dependent code waits for `PlayTradeXUnity.Ready` or checks
     `PlayTradeXLifecycle.IsInitialized`.
-9.  The current build target is supported by `0.5.0-alpha`.
+9.  The current build target is supported by `0.8.0-alpha`.
 10. Android is using API Level 26+ and arm64-v8a.
 
 ------------------------------------------------------------------------

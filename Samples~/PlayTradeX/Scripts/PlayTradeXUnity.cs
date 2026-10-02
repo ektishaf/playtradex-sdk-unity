@@ -96,6 +96,14 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     /// </summary>
     public event Action NotReady;
 
+    /// <summary>
+    /// Raised when a transaction submitted through PlayTradeX
+    /// reaches a terminal mined state.
+    ///
+    /// The event is raised for both confirmed and reverted
+    /// transactions and includes the blockchain receipt.
+    /// </summary>
+    public event Action<TransactionEvent> TransactionMined;
 
     // ============================================================
     // Unity Lifecycle
@@ -105,6 +113,9 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     {
         PlayTradeXSdk.InitializationChanged +=
             OnInitializationChanged;
+
+        PlayTradeXSdk.TransactionMined +=
+            OnTransactionMined;
 
         PlayTradeXLifecycle.Ready +=
             OnLifecycleReady;
@@ -121,6 +132,9 @@ public sealed class PlayTradeXUnity : MonoBehaviour
     {
         PlayTradeXSdk.InitializationChanged -=
             OnInitializationChanged;
+
+        PlayTradeXSdk.TransactionMined -=
+            OnTransactionMined;
 
         PlayTradeXLifecycle.Ready -=
             OnLifecycleReady;
@@ -262,6 +276,36 @@ public sealed class PlayTradeXUnity : MonoBehaviour
                 "External wallet private key cannot be null or empty.",
                 nameof(privateKey));
         }
+    }
+
+    // ============================================================
+    // Transaction Events
+    // ============================================================
+
+    private void OnTransactionMined(
+        TransactionEvent transactionEvent)
+    {
+        if (transactionEvent == null)
+        {
+            Debug.LogError(
+                "[PlayTradeX Unity] Received null transaction mined event.");
+
+            return;
+        }
+
+
+        Debug.Log(
+            "[PlayTradeX Unity] Transaction mined.\n" +
+            $"Transaction ID: {transactionEvent.TransactionId}\n" +
+            $"Network: {transactionEvent.NetworkId}\n" +
+            $"Chain ID: {transactionEvent.ChainId}\n" +
+            $"Transaction Hash: {transactionEvent.TransactionHash}\n" +
+            $"Status: {transactionEvent.Status}\n" +
+            $"Receipt: {transactionEvent.Receipt}");
+
+
+        TransactionMined?.Invoke(
+            transactionEvent);
     }
 
 

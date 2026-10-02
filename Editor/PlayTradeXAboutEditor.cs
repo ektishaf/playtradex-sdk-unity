@@ -374,11 +374,11 @@ public class PlayTradeXAboutEditor : PlayTradeXEditorWindow
 
 
         DrawFeature(
-            "Multi-network EVM integration");
+            "Multi network EVM integration");
 
 
         DrawFeature(
-            "SDK-managed and external wallets");
+            "SDK managed and external wallets");
 
 
         DrawFeature(
@@ -398,7 +398,7 @@ public class PlayTradeXAboutEditor : PlayTradeXEditorWindow
 
 
         DrawFeature(
-            "Human-readable ABI support");
+            "Human readable ABI support");
 
 
         DrawFeature(
