@@ -7,10 +7,10 @@ PlayTradeX supports native EVM currency operations and
 transaction-producing smart contract operations through its Unity C#
 API.
 
-`0.4.0-alpha` adds network-aware execution and support for both the
+`0.5.0-alpha` retains network-aware execution and support for both the
 PlayTradeX identity wallet and configured external wallets.
 
-> **Documentation target:** PlayTradeX `0.4.0-alpha` · Unity `6000.3`\
+> **Documentation target:** PlayTradeX `0.5.0-alpha` · Unity `6000.3`\
 > PlayTradeX must be initialized before transaction APIs are used.
 
 ------------------------------------------------------------------------
@@ -37,7 +37,7 @@ Use the generated `GeneratedNetworks` and `GeneratedWallets` identifiers
 where appropriate.
 
 The included sample is the compile-ready reference for the exact
-`0.4.0-alpha` Unity overloads.
+`0.5.0-alpha` Unity overloads.
 
 ------------------------------------------------------------------------
 
@@ -112,7 +112,7 @@ string readable =
 
 ## Native Balance
 
-Native balance queries are network-aware in `0.4.0-alpha`.
+Native balance queries are network-aware in `0.5.0-alpha`.
 
 Select the configured network whose native currency balance should be
 queried and, where the API path requires a wallet selection, select the
@@ -253,15 +253,15 @@ data while diagnosing failures.
 
 Networks can contain multiple RPC URLs.
 
-In `0.4.0-alpha`, PlayTradeX validates RPC endpoints against the configured network Chain ID before accepting them for execution. An endpoint that reports the wrong chain is rejected.
+In `0.5.0-alpha`, PlayTradeX validates RPC endpoints against the configured network Chain ID before accepting them for execution. An endpoint that reports the wrong chain is rejected.
 
-Eligible healthy endpoints are intentionally distributed through round-robin starting positions. Concurrent requests reserve starting positions where possible, and generation-safe cursor management prevents older completions from overwriting newer reservations. Eligible transport or HTTP failures can trigger automatic failover to another configured endpoint. Retryable operation failures can place an endpoint into runtime cooldown, after which it automatically becomes eligible for retry.
+Eligible endpoints are initially sampled so successful operation latency can be learned. Once measurements are available, PlayTradeX can prefer the lowest-latency healthy endpoint. Concurrent requests retain reservation-aware selection, while eligible transport or HTTP failures can trigger automatic failover. Retryable operation failures can place an endpoint into runtime cooldown; after cooldown expires, the endpoint can automatically re-enter routing with its learned successful-latency history still available.
 
 Successful chain-validation results are cached, while temporary validation failures are tracked separately. Distinct ordered RPC pools on the same chain maintain independent load-balancer state.
 
 Transaction preparation resolves and retains its selected RPC so that approval/submission continues with the prepared endpoint rather than unnecessarily rebalancing after user consent.
 
-> `0.4.0-alpha` combines health-aware RPC load balancing with automatic failover and endpoint recovery.
+> `0.5.0-alpha` combines latency-aware smart routing with RPC validation, health tracking, automatic failover, and endpoint recovery.
 
 RPC endpoints remain external infrastructure and can fail, rate-limit requests, or become unavailable independently of PlayTradeX.
 

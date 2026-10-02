@@ -27,6 +27,94 @@ The following capabilities are currently planned for the December `1.0.0` releas
 
 ---
 
+## [0.5.0-alpha] - 2026-10-02
+
+### Smart RPC Routing Alpha
+
+This release builds on the health-aware RPC load balancing introduced in `0.4.0-alpha` by adding runtime latency measurement and latency-aware endpoint selection. PlayTradeX now samples eligible RPC endpoints, learns successful operation latency over time, and prefers the lowest-latency healthy endpoint while preserving automatic failover, runtime health cooldown/re-entry, chain validation, and concurrent reservation protection.
+
+The release continues to target **Unity 6000.3** with native support for **Windows x64** and **Android arm64-v8a**.
+
+### Added
+
+#### RPC Performance Tracking
+
+- Successful chain-aware RPC operations now contribute runtime latency measurements.
+- Endpoint latency is maintained using an exponential moving average so recent successful performance can influence routing without replacing the endpoint's history after every request.
+- Failed operations are not incorporated into latency averages; existing runtime-health handling remains responsible for retryable failures.
+- RPC performance state is scoped to the SDK lifecycle and is cleared during SDK shutdown.
+
+#### Latency-Aware RPC Routing
+
+- Eligible RPC endpoints without performance measurements are sampled before latency preference takes over.
+- After eligible endpoints have been sampled, PlayTradeX prefers the healthy endpoint with the lowest observed average latency.
+- Existing reservation-aware selection remains available when the preferred endpoint is already reserved by an in-flight request.
+- Round-robin state remains part of bootstrap, fallback, concurrency, and failover behavior rather than being removed.
+
+### Changed
+
+#### RPC Endpoint Selection
+
+- Endpoint selection is now performance-aware after initial sampling instead of relying only on health-aware round-robin distribution.
+- Runtime health and chain-validation eligibility are evaluated before latency preference is applied.
+- Temporarily unhealthy, wrong-chain, or otherwise ineligible endpoints are not selected merely because they have a favorable historical latency.
+
+#### Endpoint Recovery
+
+- A latency-preferred endpoint that experiences a retryable operation failure can enter the existing runtime-health cooldown and fail over to another eligible endpoint.
+- After cooldown expires, the endpoint can automatically re-enter routing and its previously learned successful latency remains available for selection.
+
+### Behavioral Notes
+
+#### Sampling and Smart Routing
+
+When multiple eligible RPC endpoints have not yet been measured, PlayTradeX allows them to receive successful operations so latency data can be established. Once the eligible endpoints have measurements, the SDK can prefer the lowest-latency healthy endpoint.
+
+Latency measurements are based on successful application RPC operations. Chain-validation timing is not used as a substitute for application-operation latency.
+
+#### Smart Routing and Failover
+
+Smart routing does not replace automatic failover. If the preferred endpoint encounters an eligible retryable failure, execution can continue through the configured RPC pool and runtime-health cooldown rules continue to apply.
+
+#### Transaction RPC Consistency
+
+Transaction preparation can benefit from smart RPC resolution while selecting its submission endpoint. Once a transaction is prepared, approval/submission continues using the exact RPC stored with the prepared transaction.
+
+### API Compatibility
+
+This release does **not require changes to the existing public Unity API** used by `0.4.0-alpha`. Smart RPC routing is implemented within the native networking infrastructure.
+
+Existing Unity integrations can adopt the updated package/native binaries without migrating their network/wallet-facing blockchain calls.
+
+### Validation
+
+The `0.5.0-alpha` routing implementation was validated with deterministic local RPC tests covering:
+
+- Initial sampling across three eligible endpoints with different operation latencies.
+- Preference for the lowest-latency endpoint after sampling.
+- Retryable failure of the preferred endpoint and same-request failover.
+- Runtime-health cooldown exclusion.
+- Automatic endpoint re-entry after cooldown.
+- Preservation of chain-validation caching during smart routing and recovery.
+
+### Supported Platforms
+
+| Platform | Architecture | Status |
+|---|---|---|
+| Windows | x64 | Alpha Supported |
+| Android | arm64-v8a | Alpha Supported |
+| macOS | — | Planned |
+| Linux | — | Planned |
+| iOS | — | Planned |
+
+### Unity Compatibility
+
+```text
+Unity 6000.3
+```
+
+---
+
 ## [0.4.0-alpha] - 2026-10-01
 
 ### Health-Aware RPC Load Balancing Alpha

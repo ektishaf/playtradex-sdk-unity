@@ -1,8 +1,8 @@
 {
   "name": "com.playtradex.sdk",
-  "version": "0.4.0-alpha",
+  "version": "0.5.0-alpha",
   "displayName": "PlayTradeX SDK",
-  "description": "PlayTradeX SDK 0.4.0-alpha introduces RPC load balancing for Unity blockchain applications.\n\n• Round robin request distribution across configured healthy RPC endpoints\n• Health aware endpoint selection with automatic cooldown and recovery\n• Concurrent request distribution across available RPC endpoints\n• Automatic failover with load balancer cursor correction\n• Independent load balancing state for separate RPC endpoint pools",
+  "description": "PlayTradeX SDK 0.5.0-alpha introduces Smart RPC Routing for Unity blockchain applications.\n\n• Successful RPC operation latency measurement\n• EMA based RPC latency tracking\n• Initial latency sampling across eligible RPC endpoints\n• Lowest latency healthy RPC endpoint selection\n• Smart routing with automatic failover, cooldown, and endpoint re-entry",
   "unity": "6000.3",
   "documentationUrl": "https://github.com/ektishaf/playtradex-sdk-unity/blob/main/Documentation~/index.md",
   "licensesUrl": "https://github.com/ektishaf/playtradex-sdk-unity/blob/main/LICENSE.md",
@@ -26,7 +26,7 @@
   "samples": [
     {
       "displayName": "PlayTradeX Sample",
-      "description": "PlayTradeX SDK 0.4.0-alpha integration sample for Unity.\n\n• RPC load balancing across configured endpoints\n• Round robin RPC request distribution\n• Automatic failover and endpoint recovery\n• Concurrent RPC execution\n• Network operations using load balanced RPC pools",
+      "description": "PlayTradeX SDK 0.5.0-alpha Smart RPC Routing sample for Unity.\n\n• RPC latency measurement during successful operations\n• Initial latency sampling across eligible endpoints\n• Lowest latency healthy RPC selection\n• Automatic routing away from temporarily unhealthy endpoints\n• Automatic return to faster RPC endpoints after recovery",
       "path": "Samples~/PlayTradeX"
     }
   ]

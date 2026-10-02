@@ -6,7 +6,7 @@ PlayTradeX is a native blockchain SDK with a Unity C# interface for
 integrating EVM-compatible blockchain functionality into games and
 interactive applications.
 
-This documentation targets **PlayTradeX SDK `0.4.0-alpha`** and **Unity
+This documentation targets **PlayTradeX SDK `0.5.0-alpha`** and **Unity
 `6000.3`**.
 
 > **Current Alpha platforms:** Windows x64 and Android arm64-v8a\
@@ -69,26 +69,26 @@ The Unity package also includes a sample demonstrating:
 
 ------------------------------------------------------------------------
 
-## What's New in `0.4.0-alpha`
+## What's New in `0.5.0-alpha`
 
-`0.4.0-alpha` builds on the RPC validation and automatic failover introduced in `0.3.0-alpha` by adding health-aware round-robin load balancing across eligible endpoints.
+`0.5.0-alpha` builds on the health-aware load balancing from `0.4.0-alpha` with latency-aware smart RPC routing.
 
 Major additions include:
 
--   Round-robin distribution across healthy eligible RPC endpoints
--   Runtime RPC health cooldown and automatic endpoint re-entry
--   Reservation-aware starting positions for concurrent requests
--   Generation-safe load-balancer cursor updates
--   Failover-aware cursor correction after the endpoint that actually succeeds
--   Independent load-balancer state for distinct ordered RPC pools on the same chain
+-   Successful RPC operation latency measurement
+-   Exponential moving-average latency tracking
+-   Initial sampling of unmeasured eligible endpoints
+-   Preference for the lowest-latency healthy endpoint after sampling
+-   Continued automatic failover when the preferred endpoint fails
+-   Runtime-health cooldown exclusion and automatic endpoint re-entry
 -   Continued `eth_chainId` validation and wrong-chain rejection
 -   Continued cached validation and concurrent validation synchronization
--   Continued automatic failover after eligible failures
+-   Preservation of reservation-aware concurrent selection
 -   Preservation of the prepared RPC through transaction approval/submission
 
 The existing multi-network, multi-wallet, generated identifier, Project Settings, About/Updater, and Unity sample workflows remain available.
 
-> `0.4.0-alpha` combines RPC load balancing, validation, health tracking, and automatic failover.
+> `0.5.0-alpha` adds performance-aware routing without changing the public Unity API.
 
 ------------------------------------------------------------------------
 
@@ -149,7 +149,7 @@ Initialization](getting-started.md#sdk-initialization).
 
 ## Execution Model
 
-`0.4.0-alpha` separates network selection from transaction signing.
+`0.5.0-alpha` retains the separation between network selection and transaction signing.
 
 ``` text
 Operation
@@ -173,7 +173,7 @@ source and may enter the transaction-consent flow.
 
 ## Platform Support
 
-  Platform   Architecture   `0.4.0-alpha`
+  Platform   Architecture   `0.5.0-alpha`
   ---------- -------------- ---------------
   Windows    x64            Supported
   Android    arm64-v8a      Supported
@@ -225,7 +225,7 @@ foundation with:
 ## Version
 
 ``` text
-PlayTradeX SDK: 0.4.0-alpha
+PlayTradeX SDK: 0.5.0-alpha
 Unity:           6000.3
 Windows:         x64
 Android:         arm64-v8a

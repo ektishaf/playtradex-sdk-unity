@@ -6,7 +6,7 @@ PlayTradeX is a cross-platform blockchain SDK for game developers who want to in
 
 The Unity package provides a developer-friendly C# layer while the core blockchain functionality remains inside the native PlayTradeX SDK.
 
-> **Current Release:** `0.4.0-alpha`  
+> **Current Release:** `0.5.0-alpha`  
 > **Unity:** `6000.3`  
 > **Status:** Alpha / Pre-release  
 > **Supported Platforms:** Windows x64 and Android arm64-v8a  
@@ -21,11 +21,13 @@ Blockchain integration in a game should not require every Unity team to build wa
 
 PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code can work with **configured networks**, **wallet IDs**, and familiar asynchronous operations.
 
-`0.4.0-alpha` expands the SDK foundation with:
+`0.5.0-alpha` expands the SDK foundation with:
 
 - Multi-network EVM configuration
 - Multiple RPC endpoints per network
-- Health-aware round-robin RPC load balancing across eligible endpoints
+- Latency-aware smart RPC routing across healthy eligible endpoints
+- Successful-operation latency measurement with exponential moving averages
+- Initial sampling of unmeasured eligible endpoints before latency preference
 - Automatic RPC failover across configured endpoints
 - RPC `eth_chainId` validation and wrong-network endpoint rejection
 - RPC validation caching and temporary-failure cooldown/re-entry
@@ -55,7 +57,8 @@ PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code 
 - Native EVM blockchain integration
 - Multiple configured EVM networks
 - Multiple RPC endpoints per network
-- Health-aware round-robin RPC load balancing
+- Latency-aware smart RPC routing
+- Successful-operation latency measurement and adaptive endpoint preference
 - Automatic RPC endpoint validation and failover
 - Chain ID validation with wrong-network endpoint rejection
 - RPC validation caching and temporary-failure cooldown/re-entry
@@ -112,7 +115,7 @@ PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code 
 
 # Platform Support
 
-| Platform | Architecture | `0.4.0-alpha` |
+| Platform | Architecture | `0.5.0-alpha` |
 |---|---|---|
 | Windows | x64 | **Alpha Supported** |
 | Android | arm64-v8a | **Alpha Supported** |
@@ -120,7 +123,7 @@ PlayTradeX puts those responsibilities behind a Unity-oriented SDK so game code 
 | Linux | — | Planned |
 | iOS | — | Planned |
 
-Windows and Android are the supported targets for `0.4.0-alpha`.
+Windows and Android are the supported targets for `0.5.0-alpha`.
 
 ---
 
@@ -139,12 +142,12 @@ Choose:
 Enter:
 
 ```text
-https://github.com/ektishaf/playtradex-sdk-unity.git#v0.4.0-alpha
+https://github.com/ektishaf/playtradex-sdk-unity.git#v0.5.0-alpha
 ```
 
 Using the tagged release is strongly recommended.
 
-The `#v0.4.0-alpha` revision pins the project to this exact SDK release instead of following changes on the repository branch.
+The `#v0.5.0-alpha` revision pins the project to this exact SDK release instead of following changes on the repository branch.
 
 ## `manifest.json`
 
@@ -153,7 +156,7 @@ You can also add PlayTradeX directly to the project's `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.playtradex.sdk": "https://github.com/ektishaf/playtradex-sdk-unity.git#v0.4.0-alpha"
+    "com.playtradex.sdk": "https://github.com/ektishaf/playtradex-sdk-unity.git#v0.5.0-alpha"
   }
 }
 ```
@@ -174,7 +177,7 @@ You can also add PlayTradeX directly to the project's `Packages/manifest.json`:
 
 # Quick Start
 
-`0.4.0-alpha` retains centralized network and wallet configuration in Unity Project Settings and adds **automatic RPC validation and failover** across the RPC endpoints configured for each network.
+`0.5.0-alpha` retains centralized network and wallet configuration in Unity Project Settings and adds **automatic RPC validation and failover** across the RPC endpoints configured for each network.
 
 You no longer need to treat a single RPC URL and Chain ID on a scene component as the application's blockchain configuration.
 
@@ -301,7 +304,7 @@ Block Explorer URL: https://testnet.bscscan.com
 
 A network can contain multiple RPC URLs.
 
-In `0.4.0-alpha`, these endpoints are actively used by the native RPC reliability layer rather than serving only as configuration alternatives.
+In `0.5.0-alpha`, these endpoints are actively used by the native RPC reliability layer rather than serving only as configuration alternatives.
 
 Before an endpoint is accepted, PlayTradeX validates its EVM chain ID against the configured network. An endpoint that reports the wrong chain is rejected automatically.
 
@@ -309,13 +312,13 @@ When an eligible transport or HTTP failure occurs, PlayTradeX can continue with 
 
 Use reliable HTTPS endpoints appropriate for the network being configured.
 
-> **Load balancing + failover:** `0.4.0-alpha` intentionally distributes eligible requests across healthy endpoints using round-robin starting positions, while preserving automatic failover when an endpoint encounters an eligible failure.
+> **Load balancing + failover:** `0.5.0-alpha` samples eligible endpoints, learns successful operation latency, and prefers the lowest-latency healthy endpoint while preserving automatic failover when an endpoint encounters an eligible failure.
 
 ---
 
 # 4. Built-in Testnet Presets
 
-`0.4.0-alpha` introduces package-owned EVM testnet presets.
+`0.5.0-alpha` retains the package-owned EVM testnet presets introduced in earlier Alpha releases.
 
 In the **Networks** section, PlayTradeX provides:
 
@@ -361,7 +364,7 @@ Preset data includes:
 - Block explorer URL
 - Testnet classification
 
-> Public RPC endpoints are external infrastructure and can change independently of PlayTradeX. Configure multiple valid endpoints when practical so `0.4.0-alpha` can distribute requests across healthy endpoints and fail over when an eligible endpoint becomes unavailable.
+> Public RPC endpoints are external infrastructure and can change independently of PlayTradeX. Configure multiple valid endpoints when practical so `0.5.0-alpha` can sample endpoint performance, prefer lower-latency healthy endpoints, and fail over when an eligible endpoint becomes unavailable.
 
 ---
 
@@ -397,7 +400,7 @@ If you rename a network ID, regenerate the class.
 
 Wallets are managed from the **Wallets** section of PlayTradeX Project Settings.
 
-`0.4.0-alpha` supports application-managed wallet configuration in addition to the native PlayTradeX identity wallet.
+`0.5.0-alpha` supports application-managed wallet configuration in addition to the native PlayTradeX identity wallet.
 
 A configured external wallet can contain:
 
@@ -454,7 +457,7 @@ Add the `PlayTradeXLifecycle` component to a GameObject in the application's sta
 
 The lifecycle component initializes the required platform integration and native PlayTradeX SDK using the PlayTradeX project configuration.
 
-For `0.4.0-alpha`, **RPC URLs and Chain IDs belong to network configuration**. The native SDK validates configured RPC endpoints against the network Chain ID and can fail over between eligible endpoints.
+For `0.5.0-alpha`, **RPC URLs and Chain IDs belong to network configuration**. The native SDK validates configured RPC endpoints against the network Chain ID and can fail over between eligible endpoints.
 
 Do not start blockchain operations until PlayTradeX initialization has completed successfully.
 
@@ -488,7 +491,7 @@ Use the `Ready` event when code should react to initialization and `PlayTradeXLi
 
 # Network and Wallet Execution Model
 
-`0.4.0-alpha` separates **which network to use** from **which wallet signs a transaction**.
+`0.5.0-alpha` separates **which network to use** from **which wallet signs a transaction**.
 
 ```text
 Blockchain Operation
@@ -508,7 +511,7 @@ Blockchain Operation
 
 Applications are therefore no longer designed around one globally hardcoded chain.
 
-Within the selected network, `0.4.0-alpha` resolves a validated RPC endpoint and can fail over when an eligible endpoint encounters a retryable failure. Different configured networks retain their own endpoint sets and can execute operations concurrently.
+Within the selected network, `0.5.0-alpha` resolves a validated RPC endpoint and can fail over when an eligible endpoint encounters a retryable failure. Different configured networks retain their own endpoint sets and can execute operations concurrently.
 
 ## Read Operations
 
@@ -542,7 +545,7 @@ string readable =
 Debug.Log(readable);
 ```
 
-Use the network-aware API demonstrated by the included `0.4.0-alpha` sample when selecting a configured network and wallet. Native balance operations benefit from the SDK's validated RPC resolution and failover infrastructure.
+Use the network-aware API demonstrated by the included `0.5.0-alpha` sample when selecting a configured network and wallet. Native balance operations benefit from the SDK's validated RPC resolution and failover infrastructure.
 
 ---
 
@@ -621,7 +624,7 @@ string amountWei =
     PlayTradeXUnits.ToWei("0.01");
 ```
 
-In `0.4.0-alpha`, transaction execution is network-aware and can use either:
+In `0.5.0-alpha`, transaction execution is network-aware and can use either:
 
 - The PlayTradeX identity wallet, or
 - A configured external wallet
@@ -671,9 +674,9 @@ Transaction preparation resolves a validated endpoint for the selected network a
 
 ---
 
-# RPC Load Balancing and Reliability in `0.4.0-alpha`
+# Smart RPC Routing and Reliability in `0.5.0-alpha`
 
-`0.4.0-alpha` builds on the validation and failover layer from `0.3.0-alpha` with health-aware round-robin load balancing across eligible RPC endpoints.
+`0.5.0-alpha` builds on the validation, failover, and health-aware load-balancing foundation from earlier Alpha releases with latency-aware smart routing across eligible RPC endpoints.
 
 For supported RPC operations, the native SDK can:
 
@@ -685,7 +688,7 @@ For supported RPC operations, the native SDK can:
 - Apply cooldowns to temporarily unavailable endpoints
 - Track retryable operation failures through runtime RPC health state
 - Automatically re-admit endpoints after their cooldown expires
-- Distribute healthy requests through round-robin starting positions
+- Sample eligible endpoints and prefer the lowest-latency healthy endpoint after measurements are available
 - Reserve starting positions for concurrent in-flight requests where possible
 - Use generation-safe cursor updates so late completions cannot corrupt newer reservations
 - Retry another configured endpoint after eligible transport or HTTP failures
@@ -697,7 +700,7 @@ Validation, runtime-health, and load-balancer state are scoped to the SDK lifecy
 
 Transaction metadata operations such as nonce retrieval, gas estimation, priority-fee retrieval, and latest base-fee retrieval continue to run concurrently while using the centralized RPC infrastructure.
 
-> `0.4.0-alpha` combines RPC **load balancing, validation, health tracking, and automatic failover**.
+> `0.5.0-alpha` combines RPC **latency-aware routing, load balancing, validation, health tracking, and automatic failover**.
 
 ---
 
@@ -833,20 +836,20 @@ API Level 26+
 
 Broad storage permissions are not required for the Storage Access Framework wallet workflow.
 
-For `0.4.0-alpha`, unnecessary debug/symbol information is stripped from the distributed Android Release library, reducing `libPlayTradeXSDK.so` from approximately **44 MB to 10 MB**.
+For `0.5.0-alpha`, unnecessary debug/symbol information is stripped from the distributed Android Release library, reducing `libPlayTradeXSDK.so` from approximately **44 MB to 10 MB**.
 
 ---
 
 # PlayTradeX Updater
 
-`0.4.0-alpha` includes PlayTradeX package update tooling.
+`0.5.0-alpha` includes PlayTradeX package update tooling.
 
 The updater provides information about the installed package and available PlayTradeX releases.
 
 For Git installations, install tagged releases whenever possible:
 
 ```text
-https://github.com/ektishaf/playtradex-sdk-unity.git#v0.4.0-alpha
+https://github.com/ektishaf/playtradex-sdk-unity.git#v0.5.0-alpha
 ```
 
 A tagged installation gives the project a reproducible SDK revision.
@@ -951,22 +954,22 @@ Applications integrating PlayTradeX should follow these rules:
 
 ---
 
-# Migrating to `0.4.0-alpha`
+# Migrating to `0.5.0-alpha`
 
-## From `0.3.0-alpha`
+## From `0.4.0-alpha`
 
-The public Unity network/wallet API used by `0.3.0-alpha` remains compatible with `0.4.0-alpha`.
+The public Unity network/wallet API used by `0.4.0-alpha` remains compatible with `0.5.0-alpha`.
 
-The major change is inside the native RPC infrastructure. Existing multi-RPC network configurations now gain health-aware round-robin load balancing in addition to the validation and automatic failover behavior introduced in `0.3.0-alpha`.
+The major change is inside the native RPC infrastructure. Existing multi-RPC network configurations now gain latency-aware smart routing in addition to the validation and automatic failover behavior introduced in `0.3.0-alpha`.
 
 When upgrading:
 
-1. Update the package/tag to `v0.4.0-alpha`.
+1. Update the package/tag to `v0.5.0-alpha`.
 2. Keep the existing PlayTradeX Project Settings network and wallet configuration.
 3. Verify that each configured network has the correct Chain ID.
 4. Configure multiple valid HTTPS RPC endpoints where load balancing and failover are desired.
 5. Replace/update the native Windows and Android binaries through the package update.
-6. Test healthy round-robin distribution, balance queries, contract reads, transaction preparation, consent, and submission.
+6. Test initial endpoint sampling, lowest-latency selection, failover/recovery, balance queries, contract reads, transaction preparation, consent, and submission.
 7. Verify failure/cooldown behavior with unavailable or wrong-chain RPC endpoints before shipping.
 
 > Transaction preparation may use load-balanced RPC resolution, but an already prepared transaction retains its selected RPC through approval/submission.
@@ -989,7 +992,7 @@ GeneratedWallets
         ↓
 Network-aware / wallet-aware operations
         ↓
-Load-balanced validated RPC resolution + failover
+Latency-aware validated RPC routing + failover
 ```
 
 Move network configuration into the **Networks** section, configure one or more RPC endpoints per network, generate the network/wallet constants, and use the current sample as the integration reference.
@@ -997,7 +1000,7 @@ Move network configuration into the **Networks** section, configure one or more 
 
 # Alpha Notice
 
-PlayTradeX `0.4.0-alpha` is a prerelease intended for development, integration testing, and developer feedback.
+PlayTradeX `0.5.0-alpha` is a prerelease intended for development, integration testing, and developer feedback.
 
 APIs, configuration structures, behavior, platform support, and package structure may change before the stable `1.0.0` release.
 
@@ -1007,7 +1010,7 @@ Developers should thoroughly test wallet and transaction functionality in their 
 
 # Roadmap to PlayTradeX `1.0.0`
 
-`0.4.0-alpha` builds on multi-network execution with health-aware RPC load balancing, chain validation, automatic failover, runtime health tracking, validation caching, and transaction RPC consistency.
+`0.5.0-alpha` builds on multi-network execution with latency-aware smart RPC routing while preserving chain validation, automatic failover, runtime health tracking, validation caching, concurrent reservation protection, and transaction RPC consistency.
 
 The planned December `1.0.0` release is intended to expand the SDK further across engines and platforms.
 
